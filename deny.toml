@@ -1,0 +1,21 @@
+[graph]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[licenses]
+include-dev = true
+include-build = true
+confidence-threshold = 0.93
+# Unicode-3.0 individually reviewed and explicitly approved by the user on 2026-10-24.
+allow = ["MIT", "MIT-0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "CC0-1.0", "Unicode-3.0"]
+
+[bans]
+multiple-versions = "warn"
+deny = [
+    { name = "ffmpeg-sys-next" },
+    { name = "ffmpeg-next" },
+    { name = "voicevox_core" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

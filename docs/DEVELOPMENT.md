@@ -1,0 +1,41 @@
+# 開発者向け情報
+
+利用方法・導入手順は[README](../README.md)、実装・検証状況は[STATUS.md](STATUS.md)を参照してください。
+
+## 技術構成
+
+アプリケーション固有のコードはRustです。GUIはegui / eframe、描画はglow / OpenGLを使用します。Electron・Node.js・Pythonランタイム・WebViewは実行に不要です。
+
+主な依存ライブラリはureq、serde / serde_json、Fluent / unic-langid、image、ab_glyph、hound、uuid、libcです。依存関係の条件と原文は[第三者ライセンス一覧](../THIRD_PARTY_LICENSES.md)を参照してください。
+
+翻訳は `locales/<言語>/main.ftl` に分離しています。設定ディレクトリの同じ構成に翻訳を追加すると、次回起動時に言語一覧へ追加されます。不足した項目は英語へフォールバックします。
+
+## 品質チェック
+
+`cargo-deny` は開発用ツールです。手動導入する場合は次を使用します。
+
+```bash
+cargo install --locked --version 0.20.2 cargo-deny
+```
+
+```bash
+cargo fmt --all -- --check
+cargo check --locked
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --locked
+cargo deny check licenses
+cargo run --locked --bin license-notices
+```
+
+通常のテストでは、外部FFmpeg・VOICEVOX・音声デバイスを必要とする試験を除外します。外部試験の実行条件・結果は[開発状況](STATUS.md)を参照してください。
+
+## ライセンス文書
+
+`license-notices` は第三者表示を生成し、原文の欠落時はエラーにします。上流のライセンス文書を自動取得するツールではありません。
+
+- [第三者ライセンス一覧](../THIRD_PARTY_LICENSES.md)
+- [ライセンス原文](../LICENSES/)
+- [上流文書の取得元・コミット・SHA-256](UPSTREAM_LICENSES.json)
+- [依存・ネイティブライブラリ・アセットの監査記録](LICENSE_AUDIT.md)
+
+公開先、GitHubの所有者、正式なLinuxアプリケーションIDは未決定です。名称・商標の利用可否も未確認です。

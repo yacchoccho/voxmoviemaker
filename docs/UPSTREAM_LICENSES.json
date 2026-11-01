@@ -1,0 +1,178 @@
+[
+  {
+    "crate": "ecolor",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-MIT",
+    "path": "LICENSES/ecolor-0.33.3/upstream/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "crate": "ecolor",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-APACHE",
+    "path": "LICENSES/ecolor-0.33.3/upstream/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "crate": "eframe",
+    "version": "0.33.2",
+    "commit": "978ec6c8701a5bb6087f42d401d189d2bcf26d32",
+    "url": "https://raw.githubusercontent.com/emilk/egui/978ec6c8701a5bb6087f42d401d189d2bcf26d32/LICENSE-MIT",
+    "path": "LICENSES/eframe-0.33.2/upstream/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "crate": "eframe",
+    "version": "0.33.2",
+    "commit": "978ec6c8701a5bb6087f42d401d189d2bcf26d32",
+    "url": "https://raw.githubusercontent.com/emilk/egui/978ec6c8701a5bb6087f42d401d189d2bcf26d32/LICENSE-APACHE",
+    "path": "LICENSES/eframe-0.33.2/upstream/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "crate": "egui",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-MIT",
+    "path": "LICENSES/egui-0.33.3/upstream/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "crate": "egui",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-APACHE",
+    "path": "LICENSES/egui-0.33.3/upstream/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "crate": "egui-winit",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-MIT",
+    "path": "LICENSES/egui-winit-0.33.3/upstream/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "crate": "egui-winit",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-APACHE",
+    "path": "LICENSES/egui-winit-0.33.3/upstream/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "crate": "egui_glow",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-MIT",
+    "path": "LICENSES/egui_glow-0.33.3/upstream/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "crate": "egui_glow",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-APACHE",
+    "path": "LICENSES/egui_glow-0.33.3/upstream/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "crate": "emath",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-MIT",
+    "path": "LICENSES/emath-0.33.3/upstream/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "crate": "emath",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-APACHE",
+    "path": "LICENSES/emath-0.33.3/upstream/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "crate": "epaint",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-MIT",
+    "path": "LICENSES/epaint-0.33.3/upstream/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "crate": "epaint",
+    "version": "0.33.3",
+    "commit": "44cdd653e2317d300fb8a6c9c36b03f23991e803",
+    "url": "https://raw.githubusercontent.com/emilk/egui/44cdd653e2317d300fb8a6c9c36b03f23991e803/LICENSE-APACHE",
+    "path": "LICENSES/epaint-0.33.3/upstream/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "crate": "fluent-langneg",
+    "version": "0.13.1",
+    "commit": "7fdc590466ea63ca2367ac10fb1b881fe561f1a8",
+    "url": "https://raw.githubusercontent.com/projectfluent/fluent-langneg-rs/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-MIT",
+    "path": "LICENSES/fluent-langneg-0.13.1/upstream/LICENSE-MIT",
+    "sha256": "016fcc02048817d628b04b140c54db290fd9d29a5e8a55b77871194e810716ac"
+  },
+  {
+    "crate": "fluent-langneg",
+    "version": "0.13.1",
+    "commit": "7fdc590466ea63ca2367ac10fb1b881fe561f1a8",
+    "url": "https://raw.githubusercontent.com/projectfluent/fluent-langneg-rs/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-APACHE",
+    "path": "LICENSES/fluent-langneg-0.13.1/upstream/LICENSE-APACHE",
+    "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+  },
+  {
+    "crate": "gl_generator",
+    "version": "0.14.0",
+    "commit": "ea503e8d5fb6d73c6030e6191ce738cd3bf3433e",
+    "url": "https://raw.githubusercontent.com/brendanzab/gl-rs/ea503e8d5fb6d73c6030e6191ce738cd3bf3433e/LICENSE",
+    "path": "LICENSES/gl_generator-0.14.0/upstream/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "crate": "intl_pluralrules",
+    "version": "7.0.2",
+    "commit": "d0715d5b7cca72e228d6e6c4de154bd30dfdd06a",
+    "url": "https://raw.githubusercontent.com/zbraniecki/pluralrules/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-MIT",
+    "path": "LICENSES/intl_pluralrules-7.0.2/upstream/LICENSE-MIT",
+    "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+  },
+  {
+    "crate": "intl_pluralrules",
+    "version": "7.0.2",
+    "commit": "d0715d5b7cca72e228d6e6c4de154bd30dfdd06a",
+    "url": "https://raw.githubusercontent.com/zbraniecki/pluralrules/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-APACHE",
+    "path": "LICENSES/intl_pluralrules-7.0.2/upstream/LICENSE-APACHE",
+    "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+  },
+  {
+    "crate": "khronos_api",
+    "version": "3.1.0",
+    "commit": "f150967b1c44ae888e6676f93f639ebc82771bdc",
+    "url": "https://raw.githubusercontent.com/brendanzab/gl-rs/f150967b1c44ae888e6676f93f639ebc82771bdc/LICENSE",
+    "path": "LICENSES/khronos_api-3.1.0/upstream/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "crate": "profiling",
+    "version": "1.0.18",
+    "commit": "8271551172eb6fa4cba47369aedd93790c623df9",
+    "url": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-MIT",
+    "path": "LICENSES/profiling-1.0.18/upstream/LICENSE-MIT",
+    "sha256": "c8167fdeeed46d3f244d3f85c5bf998ce889343691c32be2c61a8bc4b5c08333"
+  },
+  {
+    "crate": "profiling",
+    "version": "1.0.18",
+    "commit": "8271551172eb6fa4cba47369aedd93790c623df9",
+    "url": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-APACHE",
+    "path": "LICENSES/profiling-1.0.18/upstream/LICENSE-APACHE",
+    "sha256": "10d30a673cd5e9349bdc02aeb48f14b3386d27d0da32df8f0a555d4aa16aa551"
+  }
+]

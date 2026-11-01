@@ -1,0 +1,78 @@
+/target
+*.wav
+*.mp4
+*.webm
+*.nut
+*.vmm.json
+*.part
+
+# ビルド・配布・カバレッジの生成物（Cargo.lock は管理する）
+/dist/
+/coverage/
+*.profraw
+*.profdata
+*.rs.bk
+
+# ローカルの作業データ（生成音声は通常 XDG データ領域へ保存）
+/tmp/
+/temp/
+/cache/
+/exports/
+/projects/
+/.local/share/voxmoviemaker/
+/.cache/voxmoviemaker/
+/.config/voxmoviemaker/
+
+# 音声・動画の誤追加防止（大文字の拡張子にも対応）
+*.[wW][aA][vV]
+*.[mM][pP]4
+*.[wW][eE][bB][mM]
+*.[nN][uU][tT]
+*.[mM][pP]3
+*.[fF][lL][aA][cC]
+*.[oO][gG][gG]
+*.[oO][pP][uU][sS]
+*.[aA][aA][cC]
+*.[mM]4[aA]
+*.[aA][iI][fF]
+*.[aA][iI][fF][fF]
+*.[wW][mM][aA]
+*.[mM][oO][vV]
+*.[mM][kK][vV]
+*.[aA][vV][iI]
+*.[mM]4[vV]
+*.[mM][pP][gG]
+*.[mM][pP][eE][gG]
+*.[mM][tT][sS]
+*.[mM]2[tT][sS]
+*.[wW][mM][vV]
+*.[fF][lL][vV]
+*.[vV][mM][mM].[jJ][sS][oO][nN]
+
+# 保存・書き出し・編集作業の一時ファイル
+.voxmoviemaker-package-*/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+ffmpeg-*.log
+
+# IDE の個人設定
+/.vscode/
+/.idea/
+*.code-workspace
+
+# ローカル環境設定（共有用サンプルは除外しない）
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# OS が作る管理ファイル
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini

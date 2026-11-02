@@ -526,6 +526,59 @@ fn speaker_selection_above_voice_input_shares_settings_with_properties() {
 }
 
 #[test]
+fn searchable_font_selection_applies_path_and_collection_index_to_selected_text() {
+    use voxmoviemaker::{media::fonts::FontId, ui::searchable_combo_box::Choice};
+    let mut f = Fixture::new();
+    let font = FontId {
+        path: f.root.join("日本語フォント.ttc"),
+        index: 2,
+    };
+    f.app.fonts.loaded = true;
+    f.app.fonts.choices = vec![
+        Choice::new(FontId::default(), "Automatic"),
+        Choice::new(font.clone(), "Collection face"),
+    ];
+    f.app.insert_text(false, false);
+    let target = f.app.selected.unwrap();
+    let original = f.app.project.clone();
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    let label = format!("{}  ▾", f.app.tr("font-automatic"));
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &label))
+        .expect("selected text must expose a searchable font selector");
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    f.frame(vec![]);
+    f.frame(vec![Event::Text("cOlLeCtIoN".into())]);
+    let output = f.frame(vec![]);
+    assert_eq!(
+        f.app.project, original,
+        "searching must not edit the project"
+    );
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "Collection face"))
+        .expect("font names must be searchable");
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let ClipSource::Text { settings } = &f.app.project.clip(target).unwrap().source else {
+        panic!("expected text clip");
+    };
+    assert_eq!(settings.font, font.path);
+    assert_eq!(settings.font_index, 2);
+    assert!(!f.app.fonts.search.is_open());
+    f.app.finish_property_edit();
+    f.app.history.undo(&mut f.app.project);
+    assert_eq!(f.app.project, original);
+}
+
+#[test]
 fn voice_input_starts_on_one_row_and_shift_enter_adds_rows() {
     let mut f = Fixture::new();
     focus_voice_input(&mut f);

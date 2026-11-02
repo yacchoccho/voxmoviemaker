@@ -175,6 +175,13 @@ subtitle-from-voice = Enable subtitle on selected VOICEVOX clip
 subtitle-placeholder = Enter subtitle text
 text-placeholder = Enter text
 font-size = Font size (project px)
+font-select = Font
+font-automatic = Automatic (system font)
+font-loading = Loading fonts…
+font-list-failed = Could not list fonts. You can still specify a font file.
+font-retry = Reload fonts
+combo-search = Search…
+combo-no-results = No results found
 font-path = System font file (empty = automatic)
 font-index = Collection index
 font-auto = Fonts are read from your system and never copied into portable projects.

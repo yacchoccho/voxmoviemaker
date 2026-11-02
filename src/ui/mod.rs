@@ -2,6 +2,7 @@ mod dialogs;
 pub mod file_picker;
 pub mod preview;
 mod properties;
+pub mod searchable_combo_box;
 pub mod timeline;
 mod voice_input;
 use crate::{

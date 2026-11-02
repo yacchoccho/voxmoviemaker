@@ -23,6 +23,7 @@ use std::{
     },
     time::Duration,
 };
+mod fonts;
 mod import;
 mod package;
 mod property_edit;
@@ -41,6 +42,7 @@ pub struct VoiceRequest {
     pub audition: bool,
 }
 pub enum Event {
+    Fonts(Result<Vec<media::fonts::SystemFont>>),
     Tools(PathBuf, PathBuf, Result<Capabilities>),
     Connection(String, Result<Connection>),
     Imported(Id, Option<Id>, u64, Vec<Result<MediaAsset>>),
@@ -98,6 +100,7 @@ pub struct App {
     pub voice_input_rect: Option<egui::Rect>,
     pub voice_ime_composing: bool,
     pub voice_settings: VoicevoxSettings,
+    pub fonts: fonts::FontCatalog,
     pub connection: Option<Connection>,
     pub tools: Option<Capabilities>,
     pub worker: Worker<Event>,
@@ -178,6 +181,7 @@ impl App {
             voice_input_rect: None,
             voice_ime_composing: false,
             voice_settings: VoicevoxSettings::default(),
+            fonts: Default::default(),
             connection: None,
             tools: None,
             worker: Worker::new(ctx.clone()),
@@ -675,6 +679,25 @@ impl App {
     pub fn poll(&mut self, ctx: &egui::Context) {
         while let Ok(event) = self.worker.receiver.try_recv() {
             match event {
+                Event::Fonts(result) => {
+                    self.fonts.loading = false;
+                    match result {
+                        Ok(fonts) => {
+                            self.fonts.choices =
+                                std::iter::once(crate::ui::searchable_combo_box::Choice::new(
+                                    media::fonts::FontId::default(),
+                                    self.tr("font-automatic"),
+                                ))
+                                .chain(fonts.into_iter().map(|font| {
+                                    crate::ui::searchable_combo_box::Choice::new(font.id, font.name)
+                                }))
+                                .collect();
+                            self.fonts.loaded = true;
+                            self.fonts.error = None;
+                        }
+                        Err(error) => self.fonts.error = Some(error),
+                    }
+                }
                 Event::Tools(ffmpeg, ffprobe, result) => {
                     self.detecting = false;
                     if ffmpeg == self.settings.ffmpeg && ffprobe == self.settings.ffprobe {

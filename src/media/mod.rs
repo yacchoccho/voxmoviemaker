@@ -4,6 +4,7 @@ pub mod export;
 pub mod ffmpeg;
 pub mod ffprobe;
 mod filter_graph;
+pub mod fonts;
 pub mod playback;
 pub mod preview;
 pub mod render_plan;

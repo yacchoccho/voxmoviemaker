@@ -65,7 +65,7 @@ impl App {
                     } else {
                         "text-clip"
                     }));
-                    self.text_properties(ui, settings);
+                    self.text_properties(ui, settings, clip.id);
                 }
                 if let ClipSource::Voicevox { text, subtitle, .. } = &mut clip.source {
                     ui.separator();
@@ -81,7 +81,7 @@ impl App {
                     }
                     if let Some(style) = subtitle {
                         ui.small(self.tr("voice-subtitle-hint"));
-                        self.text_properties(ui, style);
+                        self.text_properties(ui, style, clip.id);
                     }
                 }
                 let visual = matches!(
@@ -267,8 +267,9 @@ impl App {
             }
         }
     }
-    fn text_properties(&self, ui: &mut egui::Ui, settings: &mut TextSettings) {
+    fn text_properties(&mut self, ui: &mut egui::Ui, settings: &mut TextSettings, target: Id) {
         ui.add(egui::TextEdit::multiline(&mut settings.text).desired_rows(3));
+        self.font_selector(ui, settings, target);
         ui.add(egui::Slider::new(&mut settings.size, 8.0..=256.0).text(self.tr("font-size")));
         ui.horizontal(|ui| {
             ui.label(self.tr("text-color"));
@@ -299,16 +300,75 @@ impl App {
                 ui.selectable_value(&mut settings.anchor, anchor, self.tr(key));
             }
         });
-        ui.label(self.tr("font-path"));
-        let mut font = settings.font.to_string_lossy().into_owned();
-        if ui.text_edit_singleline(&mut font).changed() {
-            settings.font = font.into();
-        }
         ui.small(self.tr("font-auto"));
-        ui.horizontal(|ui| {
-            ui.label(self.tr("font-index"));
-            ui.add(egui::DragValue::new(&mut settings.font_index).range(0..=64));
+        ui.collapsing(self.tr("font-path"), |ui| {
+            let mut font = settings.font.to_string_lossy().into_owned();
+            if ui.text_edit_singleline(&mut font).changed() {
+                settings.font = font.into();
+            }
+            ui.horizontal(|ui| {
+                ui.label(self.tr("font-index"));
+                ui.add(egui::DragValue::new(&mut settings.font_index).range(0..=64));
+            });
         });
+    }
+
+    fn font_selector(&mut self, ui: &mut egui::Ui, settings: &mut TextSettings, target: Id) {
+        use super::searchable_combo_box::{Choice, Labels, searchable_combo_box};
+        use crate::media::fonts::FontId;
+        if !self.fonts.loaded && !self.fonts.loading && self.fonts.error.is_none() {
+            self.request_fonts();
+        }
+        let automatic = self.tr("font-automatic");
+        if self.fonts.choices.is_empty() {
+            self.fonts
+                .choices
+                .push(Choice::new(FontId::default(), automatic.clone()));
+        } else {
+            self.fonts.choices[0].set_label(automatic.clone());
+        }
+        let mut selected = FontId {
+            path: settings.font.clone(),
+            index: settings.font_index,
+        };
+        let fallback = if settings.font.as_os_str().is_empty() {
+            automatic
+        } else {
+            format!("{} / {}", settings.font.display(), settings.font_index)
+        };
+        ui.label(self.tr("font-select"));
+        let search = self.tr("combo-search");
+        let no_results = self.tr("combo-no-results");
+        if searchable_combo_box(
+            ui,
+            ("text-font", target),
+            &mut self.fonts.search,
+            &mut selected,
+            &self.fonts.choices,
+            Labels {
+                search: &search,
+                no_results: &no_results,
+                fallback: &fallback,
+            },
+        )
+        .on_hover_text(&fallback)
+        .changed()
+        {
+            settings.font = selected.path;
+            settings.font_index = selected.index;
+        }
+        if self.fonts.loading {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.small(self.tr("font-loading"));
+            });
+        }
+        if let Some(error) = self.fonts.error.clone() {
+            ui.small(self.tr("font-list-failed")).on_hover_text(error);
+            if ui.small_button(self.tr("font-retry")).clicked() {
+                self.request_fonts();
+            }
+        }
     }
     fn voice_properties(&mut self, ui: &mut egui::Ui) {
         ui.strong("VOICEVOX");

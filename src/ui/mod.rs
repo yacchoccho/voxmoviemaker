@@ -1,3 +1,4 @@
+pub mod characters;
 mod dialogs;
 pub mod file_picker;
 pub mod preview;
@@ -348,6 +349,7 @@ impl App {
             }
             self.preview_interaction(ui, rect);
         });
+        self.character_window(ctx);
         self.dialogs(ctx);
         if self.confirm_new && (!self.dirty() && !self.generating && !self.importing) {
             self.confirm_new = false;

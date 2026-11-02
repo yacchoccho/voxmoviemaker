@@ -55,6 +55,7 @@ impl Fixture {
         };
         let mut p = Project::default();
         p.tracks[0].clips.push(Clip {
+            character: None,
             id: Id::new_v4(),
             source: ClipSource::Media { asset_id: a.id },
             timeline_start: 0,

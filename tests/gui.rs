@@ -71,6 +71,37 @@ impl Fixture {
             modifiers: egui::Modifiers::NONE,
         }
     }
+    fn register_character(&mut self, name: &str, speed: f64, style: u32) -> Id {
+        use voxmoviemaker::{
+            characters::Character,
+            voicevox::{Connection, Speaker, Style},
+        };
+        let mut character =
+            Character::new(name.into(), self.app.project.width, self.app.project.height);
+        character.voice.speaker_uuid = "speaker-uuid".into();
+        character.voice.speaker_name = "speaker".into();
+        character.voice.style_name = "Normal".into();
+        character.voice.speaker = style;
+        character.voice.speed = speed;
+        let id = character.id;
+        let mut library = self.app.characters.library.clone();
+        library.characters.push(character);
+        self.app.characters.save(library).unwrap();
+        self.app.settings.character = Some(id);
+        self.app.connection = Some(Connection {
+            version: "test".into(),
+            speakers: vec![Speaker {
+                name: "speaker".into(),
+                speaker_uuid: "speaker-uuid".into(),
+                styles: vec![Style {
+                    id: style,
+                    name: "Normal".into(),
+                    style_type: None,
+                }],
+            }],
+        });
+        id
+    }
     fn image_clip(&mut self, track: usize) -> Id {
         let asset = MediaAsset {
             id: Id::new_v4(),
@@ -90,6 +121,7 @@ impl Fixture {
             audio_stream: None,
         };
         let clip = Clip {
+            character: None,
             id: Id::new_v4(),
             source: ClipSource::Media { asset_id: asset.id },
             timeline_start: 0,
@@ -227,6 +259,7 @@ fn native_ui_layout_language_theme_and_voice_selection_restore() {
         audio_stream: Some(0),
     };
     let c = Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Voicevox {
             asset_id: a.id,
@@ -234,7 +267,8 @@ fn native_ui_layout_language_theme_and_voice_selection_restore() {
             settings: VoicevoxSettings {
                 speed: 1.2,
                 ..Default::default()
-            },
+            }
+            .into(),
             subtitle: None,
         },
         timeline_start: 0,
@@ -276,6 +310,7 @@ fn pointer_drag_moves_clip_to_another_generic_layer() {
         audio_stream: None,
     };
     let c = Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Media { asset_id: a.id },
         timeline_start: 0,
@@ -450,79 +485,469 @@ fn focus_voice_input(f: &mut Fixture) {
 }
 
 #[test]
-fn speaker_selection_above_voice_input_shares_settings_with_properties() {
-    use voxmoviemaker::voicevox::{Connection, Speaker, Style};
+fn character_selection_replaces_speaker_ui_and_preserves_text_and_existing_clips() {
     for select_image in [false, true] {
         let mut f = Fixture::new();
-        f.app.connection = Some(Connection {
-            version: "test".into(),
-            speakers: vec![
-                Speaker {
-                    name: "First speaker".into(),
-                    speaker_uuid: "first".into(),
-                    styles: vec![Style {
-                        id: 1,
-                        name: "Normal".into(),
-                        style_type: None,
-                    }],
-                },
-                Speaker {
-                    name: "Second speaker".into(),
-                    speaker_uuid: "second".into(),
-                    styles: vec![Style {
-                        id: 2,
-                        name: "Soft".into(),
-                        style_type: None,
-                    }],
-                },
-            ],
-        });
-        f.app.voice_settings.speaker = 1;
-        f.app.voice_settings.speaker_name = "First speaker".into();
-        f.app.voice_settings.style_name = "Normal".into();
+        let first = f.register_character("First character", 1.2, 0);
+        let second = f.register_character("Second character", 0.9, 0);
+        f.app.settings.character = Some(first);
         if select_image {
             let id = f.image_clip(0);
             f.app.select(id);
         }
         f.app.voice_text = "Keep this text".into();
+        let original = f.app.project.clone();
         f.frame(vec![]);
         let output = f.frame(vec![]);
-        let input = f.app.voice_input_rect.unwrap();
-        let timeline = f.app.timeline_rect.unwrap();
         let selector = output
             .shapes
             .iter()
-            .filter_map(|s| text_position(&s.shape, "First speaker / Normal"))
-            .find(|p| p.y > timeline.bottom() && p.y < input.top())
-            .expect("speaker selector must be above the text input");
-        f.frame(vec![Event::PointerMoved(selector)]);
-        f.frame(vec![Fixture::button(selector, true)]);
-        f.frame(vec![Fixture::button(selector, false)]);
-        let popup = f.frame(vec![]);
-        let option = popup
-            .shapes
-            .iter()
-            .find_map(|s| text_position(&s.shape, "Second speaker / Soft"))
-            .expect("speaker and style must be selectable");
-        f.frame(vec![Event::PointerMoved(option)]);
-        f.frame(vec![Fixture::button(option, true)]);
-        f.frame(vec![Fixture::button(option, false)]);
-        assert_eq!(f.app.voice_settings.speaker, 2);
-        assert_eq!(f.app.voice_settings.speaker_name, "Second speaker");
-        assert_eq!(f.app.voice_settings.style_name, "Soft");
-        assert_eq!(f.app.voice_text, "Keep this text");
-        f.app.selected = None;
-        let output = f.frame(vec![]);
-        assert_eq!(
+            .find_map(|s| text_position(&s.shape, "First character  ▾"))
+            .unwrap();
+        assert!(selector.y > f.app.timeline_rect.unwrap().bottom());
+        assert!(selector.y < f.app.voice_input_rect.unwrap().top());
+        assert!(
             output
                 .shapes
                 .iter()
-                .filter(|s| text_position(&s.shape, "Second speaker / Soft").is_some())
-                .count(),
-            2,
-            "input and properties selectors must display the same setting"
+                .all(|s| text_position(&s.shape, "speaker / Normal").is_none())
+        );
+        f.frame(vec![Event::PointerMoved(selector)]);
+        f.frame(vec![Fixture::button(selector, true)]);
+        f.frame(vec![Fixture::button(selector, false)]);
+        f.frame(vec![]);
+        f.frame(vec![Event::Text("second".into())]);
+        let output = f.frame(vec![]);
+        let option = output
+            .shapes
+            .iter()
+            .find_map(|s| text_position(&s.shape, "Second character"))
+            .unwrap();
+        f.frame(vec![Event::PointerMoved(option)]);
+        f.frame(vec![Fixture::button(option, true)]);
+        f.frame(vec![Fixture::button(option, false)]);
+        assert_eq!(f.app.settings.character, Some(second));
+        assert_eq!(f.app.voice_text, "Keep this text");
+        assert_eq!(f.app.project, original);
+        assert_eq!(
+            f.app.characters.library.get(second).unwrap().voice.speed,
+            0.9
         );
     }
+}
+
+#[test]
+fn character_name_can_be_cleared_and_retyped_without_losing_focus() {
+    let mut f = Fixture::new();
+    let id = f.register_character("Original", 1.0, 0);
+    let focus = focus_character_name(&mut f, id);
+    select_all_text(&mut f);
+    f.frame(vec![Event::Key {
+        key: egui::Key::Backspace,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Default::default(),
+    }]);
+    f.frame(vec![]);
+    assert_eq!(f.ctx.memory(|m| m.focused()), Some(focus));
+    assert_eq!(f.app.character_ui.draft.as_ref().unwrap().name, "");
+    assert_eq!(f.app.characters.library.get(id).unwrap().name, "Original");
+    f.frame(vec![Event::Text("新しい名前".into())]);
+    f.frame(vec![]);
+    assert_eq!(f.ctx.memory(|m| m.focused()), Some(focus));
+    assert_eq!(f.app.characters.library.get(id).unwrap().name, "新しい名前");
+}
+
+#[test]
+fn character_name_ime_preedit_is_not_saved_and_confirmation_keeps_focus() {
+    let mut f = Fixture::new();
+    let id = f.register_character("Original", 1.0, 0);
+    let focus = focus_character_name(&mut f, id);
+    select_all_text(&mut f);
+    let path = f.app.storage.config.join("characters.json");
+    let original = fs::read(&path).unwrap();
+    f.frame(vec![
+        Event::Ime(egui::ImeEvent::Enabled),
+        Event::Ime(egui::ImeEvent::Preedit("あおい".into())),
+    ]);
+    f.frame(vec![]);
+    assert_eq!(
+        fs::read(&path).unwrap(),
+        original,
+        "preedit must stay in the editor"
+    );
+    f.frame(vec![enter(egui::Modifiers::NONE)]);
+    assert_eq!(f.ctx.memory(|m| m.focused()), Some(focus));
+    assert_eq!(f.app.characters.library.get(id).unwrap().name, "Original");
+    f.frame(vec![
+        Event::Ime(egui::ImeEvent::Commit("葵".into())),
+        release_enter(),
+        enter(egui::Modifiers::NONE),
+    ]);
+    f.frame(vec![]);
+    assert_eq!(f.ctx.memory(|m| m.focused()), Some(focus));
+    assert_eq!(f.app.characters.library.get(id).unwrap().name, "葵");
+    f.frame(vec![Event::Text("さん".into())]);
+    assert_eq!(f.app.characters.library.get(id).unwrap().name, "葵さん");
+}
+
+#[test]
+fn character_name_keeps_focus_and_draft_when_a_save_error_appears() {
+    let mut f = Fixture::new();
+    let id = f.register_character("Original", 1.0, 0);
+    let focus = focus_character_name(&mut f, id);
+    select_all_text(&mut f);
+    let path = f.app.storage.config.join("characters.json");
+    let external = format!("{}\n", fs::read_to_string(&path).unwrap());
+    fs::write(&path, &external).unwrap();
+    f.frame(vec![Event::Text("First".into())]);
+    f.frame(vec![]);
+    assert_eq!(f.ctx.memory(|m| m.focused()), Some(focus));
+    f.frame(vec![Event::Text("-second".into())]);
+    assert_eq!(
+        f.app.character_ui.draft.as_ref().unwrap().name,
+        "First-second"
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), external);
+}
+
+fn focus_character_name(f: &mut Fixture, id: Id) -> egui::Id {
+    f.app.character_ui.open = true;
+    f.app.character_ui.selected = Some(id);
+    let label = f.app.characters.library.get(id).unwrap().name.clone();
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &label))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    f.ctx
+        .memory(|m| m.focused())
+        .expect("name editor must have focus")
+}
+
+fn select_all_text(f: &mut Fixture) {
+    for pressed in [true, false] {
+        f.frame(vec![Event::Key {
+            key: egui::Key::A,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::CTRL | egui::Modifiers::COMMAND,
+        }]);
+    }
+}
+
+#[test]
+fn character_manager_creates_renames_duplicates_confirms_deletion_and_reloads() {
+    let mut f = Fixture::new();
+    f.app.character_ui.open = true;
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "character-new");
+    assert_eq!(f.app.characters.library.characters.len(), 1);
+    assert!(f.app.storage.config.join("characters.json").is_file());
+    assert!(!f.app.dirty());
+    let id = f.app.characters.library.characters[0].id;
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &f.app.tr("character-new-name")))
+        .expect("character name editor");
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    f.frame(vec![Event::Key {
+        key: egui::Key::A,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::CTRL | egui::Modifiers::COMMAND,
+    }]);
+    f.frame(vec![Event::Text("Renamed character".into())]);
+    f.frame(vec![]);
+    assert_eq!(
+        f.app.characters.library.get(id).unwrap().name,
+        "Renamed character"
+    );
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "character-duplicate");
+    assert_eq!(f.app.characters.library.characters.len(), 2);
+    let copy = f.app.character_ui.selected.unwrap();
+    assert_ne!(id, copy);
+    assert_eq!(
+        f.app.characters.library.get(id).unwrap().voice,
+        f.app.characters.library.get(copy).unwrap().voice
+    );
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "delete");
+    assert_eq!(
+        f.app.characters.library.characters.len(),
+        2,
+        "deletion requires confirmation"
+    );
+    let output = f.frame(vec![]);
+    assert!(
+        output.shapes.iter().any(|s| text_position(
+            &s.shape,
+            &f.app.tr("character-delete-warning")
+        )
+        .is_some())
+    );
+    let pos = output
+        .shapes
+        .iter()
+        .filter_map(|s| text_position(&s.shape, &f.app.tr("delete")))
+        .next_back()
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    assert!(f.app.characters.library.get(copy).is_none());
+    assert!(f.app.characters.library.get(id).is_some());
+    f.app.new_project();
+    assert_eq!(
+        f.app.characters.library.get(id).unwrap().name,
+        "Renamed character"
+    );
+    let restarted = App::from_context(
+        f.ctx.clone(),
+        f.app.storage.clone(),
+        Settings::default(),
+        None,
+    );
+    assert_eq!(restarted.characters.library, f.app.characters.library);
+}
+
+#[test]
+fn missing_or_unselected_characters_and_unavailable_styles_never_start_generation() {
+    let mut f = Fixture::new();
+    f.app.voice_text = "Keep this phrase".into();
+    f.app.generate(false);
+    assert!(!f.app.generating);
+    assert_eq!(f.app.status, f.app.tr("character-select-first"));
+    let id = f.register_character("Narrator", 1.0, 0);
+    f.app.connection = None;
+    f.app.generate(false);
+    assert!(!f.app.generating);
+    assert_eq!(f.app.status, f.app.tr("voicevox-offline"));
+    f.app.connection = Some(voxmoviemaker::voicevox::Connection {
+        version: "test".into(),
+        speakers: vec![],
+    });
+    f.app.generate(false);
+    assert!(!f.app.generating);
+    assert_eq!(f.app.status, f.app.tr("character-voice-missing"));
+    f.app.save_characters(Default::default()).unwrap();
+    assert_eq!(f.app.settings.character, Some(id));
+    f.app.generate(false);
+    assert!(!f.app.generating);
+    assert_eq!(f.app.status, f.app.tr("character-missing"));
+    assert_eq!(f.app.voice_text, "Keep this phrase");
+    assert!(f.app.project.assets.is_empty());
+    assert!(!f.app.storage.data.exists());
+    f.frame(vec![]);
+}
+
+#[test]
+fn character_speaker_changes_only_offer_matching_styles_and_update_the_style_id() {
+    use voxmoviemaker::voicevox::{Speaker, Style};
+    let mut f = Fixture::new();
+    let id = f.register_character("Profile", 1.0, 0);
+    f.app.connection.as_mut().unwrap().speakers.push(Speaker {
+        name: "Other speaker".into(),
+        speaker_uuid: "other-uuid".into(),
+        styles: vec![
+            Style {
+                id: 7,
+                name: "Other style A".into(),
+                style_type: None,
+            },
+            Style {
+                id: 8,
+                name: "Other style B".into(),
+                style_type: None,
+            },
+        ],
+    });
+    f.app.character_ui.open = true;
+    f.app.character_ui.selected = Some(id);
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "Normal"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let output = f.frame(vec![]);
+    assert!(
+        output
+            .shapes
+            .iter()
+            .all(|s| text_position(&s.shape, "Other style A").is_none())
+    );
+    f.frame(vec![Event::Key {
+        key: egui::Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Default::default(),
+    }]);
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "speaker"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "Other speaker"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let voice = &f.app.characters.library.get(id).unwrap().voice;
+    assert_eq!(voice.speaker_uuid, "other-uuid");
+    assert_eq!(voice.speaker, 7);
+    assert_eq!(voice.style_name, "Other style A");
+    use voxmoviemaker::{media::fonts::FontId, ui::searchable_combo_box::Choice};
+    let font = FontId {
+        path: f.root.join("CharacterFont.ttc"),
+        index: 2,
+    };
+    f.app.fonts.loaded = true;
+    f.app.fonts.choices = vec![
+        Choice::new(FontId::default(), "Automatic"),
+        Choice::new(font.clone(), "Character font face"),
+    ];
+    f.app.character_ui.tab = 2;
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    let label = format!("{}  ▾", f.app.tr("font-automatic"));
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &label))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    f.frame(vec![Event::Text("character font".into())]);
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "Character font face"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let profile = f.app.characters.library.get(id).unwrap();
+    assert_eq!(profile.subtitle.font, font.path);
+    assert_eq!(profile.subtitle.font_index, 2);
+    assert_eq!(profile.voice.speaker, 7);
+    assert!(
+        !f.app.dirty(),
+        "global font edits must not modify the project"
+    );
+}
+
+#[test]
+fn changing_clip_character_keeps_overrides_and_reset_controls_restore_inheritance() {
+    let mut f = Fixture::new();
+    let first = f.register_character("First", 1.0, 0);
+    let second = f.register_character("Second", 0.9, 0);
+    f.app.insert_text(false, false);
+    let target = f.app.selected.unwrap();
+    let mut binding = voxmoviemaker::characters::CharacterBinding::new(first);
+    binding.voice.speed = Some(1.5);
+    binding.subtitle.size = Some(72.0);
+    binding.subtitle.x = Some(500.0);
+    f.app.project.clip_mut(target).unwrap().character = Some(Box::new(binding.clone()));
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "First  ▾"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let output = f.frame(vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "Second"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let changed = f
+        .app
+        .project
+        .clip(target)
+        .unwrap()
+        .character
+        .as_ref()
+        .unwrap();
+    assert_eq!(changed.character_id, second);
+    assert_eq!(changed.voice, binding.voice);
+    assert_eq!(changed.subtitle, binding.subtitle);
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "override-reset");
+    assert_eq!(
+        f.app
+            .project
+            .clip(target)
+            .unwrap()
+            .character
+            .as_ref()
+            .unwrap()
+            .subtitle
+            .x,
+        None
+    );
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "overrides-reset-all");
+    let changed = f
+        .app
+        .project
+        .clip(target)
+        .unwrap()
+        .character
+        .as_ref()
+        .unwrap();
+    assert_eq!(changed.voice, Default::default());
+    assert_eq!(changed.subtitle, Default::default());
+    f.app.finish_property_edit();
+    f.app.history.undo(&mut f.app.project);
+    assert_eq!(
+        f.app
+            .project
+            .clip(target)
+            .unwrap()
+            .character
+            .as_ref()
+            .unwrap()
+            .subtitle
+            .size,
+        Some(72.0)
+    );
 }
 
 #[test]
@@ -601,6 +1026,7 @@ fn voice_input_starts_on_one_row_and_shift_enter_adds_rows() {
 #[test]
 fn voice_ime_confirmation_does_not_submit_synthesis() {
     let mut f = Fixture::new();
+    f.register_character("Narrator", 1.0, 0);
     f.app.settings.voicevox_url = "invalid-url".into();
     focus_voice_input(&mut f);
     f.frame(vec![enter(egui::Modifiers::NONE)]);
@@ -629,6 +1055,10 @@ fn consecutive_enter_synthesis_creates_new_clips_and_only_explicit_regeneration_
         net::TcpListener,
     };
     let mut f = Fixture::new();
+    let first_character = f.register_character("First narrator", 1.2, 0);
+    let second_character = f.register_character("Second narrator", 0.9, 0);
+    f.app.settings.character = Some(first_character);
+    f.app.voice_settings.speed = 2.0; // Legacy state must not drive character synthesis.
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     f.app.settings.voicevox_url = format!("http://{}", listener.local_addr().unwrap());
@@ -689,6 +1119,16 @@ fn consecutive_enter_synthesis_creates_new_clips_and_only_explicit_regeneration_
             } else {
                 "POST /synthesis?"
             }));
+            assert!(header.contains("speaker=0"));
+            if !query {
+                let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                let expected = match index {
+                    1 => 1.2,
+                    3 => 0.9,
+                    _ => 1.6,
+                };
+                assert_eq!(value["speedScale"], expected);
+            }
             if index == 1 {
                 thread::sleep(Duration::from_millis(100));
             }
@@ -717,12 +1157,17 @@ fn consecutive_enter_synthesis_creates_new_clips_and_only_explicit_regeneration_
         }
         assert!(!f.app.generating, "{}", f.app.status);
     };
+    f.app.settings.character = Some(second_character);
     wait(&mut f);
     assert_eq!(
         f.app.voice_text, "second",
         "completion must preserve the next draft"
     );
     let first = f.app.project.clip(f.app.selected.unwrap()).unwrap().clone();
+    assert_eq!(
+        first.character.as_ref().unwrap().character_id,
+        first_character
+    );
     f.frame(vec![enter(egui::Modifiers::NONE)]);
     assert!(f.app.voice_text.is_empty());
     wait(&mut f);
@@ -744,6 +1189,26 @@ fn consecutive_enter_synthesis_creates_new_clips_and_only_explicit_regeneration_
         f.app.voice_text, "second",
         "explicitly selecting the clip restores its phrase"
     );
+    assert_eq!(
+        f.app
+            .project
+            .clip(second)
+            .unwrap()
+            .character
+            .as_ref()
+            .unwrap()
+            .character_id,
+        second_character
+    );
+    f.app
+        .project
+        .clip_mut(second)
+        .unwrap()
+        .character
+        .as_mut()
+        .unwrap()
+        .voice
+        .speed = Some(1.6);
     f.app.voice_text = "updated second".into();
     let output = f.frame(vec![]);
     f.click_menu(&output, "regenerate");
@@ -765,6 +1230,7 @@ fn failed_synthesis_restores_its_phrase_without_erasing_a_new_draft() {
         f.app.voice_text = draft.into();
         f.app.generating = true;
         let request = voxmoviemaker::app::VoiceRequest {
+            character: None,
             project: f.app.project.project_uuid,
             track: f.app.project.tracks[0].id,
             start: 0,
@@ -867,7 +1333,7 @@ fn subtitle_button_creates_editable_generic_clip_and_paste_needs_no_asset() {
         output
             .shapes
             .iter()
-            .any(|shape| text_position(&shape.shape, &f.app.tr("font-path")).is_some())
+            .any(|shape| text_position(&shape.shape, &f.app.tr("font-select")).is_some())
     );
     f.app.clipboard = Some(clip);
     f.app.playhead = 90;
@@ -972,6 +1438,7 @@ fn regenerated_voice_keeps_gain_mute_and_clamps_existing_fades() {
     generated.duration_seconds = 2.0;
     let generated_id = generated.id;
     let request = voxmoviemaker::app::VoiceRequest {
+        character: None,
         project: f.app.project.project_uuid,
         track: f.app.project.tracks[0].id,
         start: 0,
@@ -1062,6 +1529,7 @@ fn synthesis_places_one_audio_subtitle_clip_and_failure_keeps_it() {
         audio_stream: Some(0),
     };
     let request = voxmoviemaker::app::VoiceRequest {
+        character: None,
         project: f.app.project.project_uuid,
         track: f.app.project.tracks[2].id,
         start: 30,
@@ -1106,6 +1574,7 @@ fn synthesis_places_one_audio_subtitle_clip_and_failure_keeps_it() {
     assert_eq!(plan.clips.iter().filter(|c| c.visual).count(), 1);
     let before = f.app.project.clone();
     let request = voxmoviemaker::app::VoiceRequest {
+        character: None,
         project: f.app.project.project_uuid,
         track: f.app.project.tracks[2].id,
         start: 0,
@@ -1455,6 +1924,7 @@ fn overlapping_voice_reuses_a_free_lower_layer_and_keeps_audio_and_subtitle_toge
     let voice = imported_asset(&f, MediaKind::Audio);
     let voice_id = voice.id;
     let request = voxmoviemaker::app::VoiceRequest {
+        character: None,
         project: f.app.project.project_uuid,
         track: f.app.project.tracks[0].id,
         start: 30,
@@ -1548,6 +2018,7 @@ fn voice_completion_never_redirects_to_a_different_layer_after_its_target_was_de
     let mut f = Fixture::new();
     let voice = imported_asset(&f, MediaKind::Audio);
     let request = voxmoviemaker::app::VoiceRequest {
+        character: None,
         project: f.app.project.project_uuid,
         track: f.app.project.tracks[0].id,
         start: 0,
@@ -1615,6 +2086,7 @@ fn longer_voice_regeneration_keeps_original_when_it_would_overlap_a_neighbor() {
     let mut generated = imported_asset(&f, MediaKind::Audio);
     generated.duration_seconds = 3.0;
     let request = voxmoviemaker::app::VoiceRequest {
+        character: None,
         project: before.project_uuid,
         track: before.tracks[0].id,
         start: 0,

@@ -32,6 +32,18 @@ impl App {
             }
             ui.separator();
             ui.add_enabled_ui(!locked, |ui| {
+                if clip.character.is_some()
+                    && let ClipSource::Voicevox { text, .. } = &mut clip.source
+                {
+                    ui.label(self.tr("voice-input"));
+                    if ui
+                        .add(egui::TextEdit::multiline(text).desired_rows(3))
+                        .changed()
+                    {
+                        self.voice_text = text.clone();
+                    }
+                }
+                self.clip_character_properties(ui, &mut clip);
                 egui::Grid::new("clip-values")
                     .num_columns(2)
                     .spacing([8.0, 8.0])
@@ -65,9 +77,20 @@ impl App {
                     } else {
                         "text-clip"
                     }));
-                    self.text_properties(ui, settings, clip.id);
+                    if clip.character.is_none() {
+                        self.text_properties(ui, settings, clip.id);
+                    } else {
+                        ui.add(egui::TextEdit::multiline(&mut settings.text).desired_rows(3));
+                    }
                 }
-                if let ClipSource::Voicevox { text, subtitle, .. } = &mut clip.source {
+                if clip.character.is_none()
+                    && let ClipSource::Voicevox {
+                        text,
+                        settings,
+                        subtitle,
+                        ..
+                    } = &mut clip.source
+                {
                     ui.separator();
                     let mut enabled = subtitle.is_some();
                     if ui
@@ -83,6 +106,17 @@ impl App {
                         ui.small(self.tr("voice-subtitle-hint"));
                         self.text_properties(ui, style, clip.id);
                     }
+                    let mut values = crate::characters::VoiceOverrides::all(settings);
+                    self.voice_identity_editor(ui, settings, "legacy-clip-identity");
+                    values.identity =
+                        Some(crate::characters::VoiceIdentity::from_settings(settings));
+                    self.voice_override_editor(
+                        ui,
+                        &VoicevoxSettings::default(),
+                        &mut values,
+                        false,
+                    );
+                    **settings = values.apply(&VoicevoxSettings::default());
                 }
                 let visual = matches!(
                     clip.source,
@@ -91,7 +125,8 @@ impl App {
                             subtitle: Some(_),
                             ..
                         }
-                ) || asset.as_ref().is_some_and(|a| a.kind != MediaKind::Audio);
+                ) || clip.character.as_ref().is_some_and(|b| b.subtitle_enabled)
+                    || asset.as_ref().is_some_and(|a| a.kind != MediaKind::Audio);
                 ui.separator();
                 ui.strong(self.tr("clip-effects"));
                 if visual {
@@ -186,7 +221,6 @@ impl App {
             }
             if let ClipSource::Voicevox { .. } = original.source {
                 ui.separator();
-                self.voice_properties(ui);
                 ui.label(self.tr(if self.generating {
                     "generating"
                 } else {
@@ -246,7 +280,10 @@ impl App {
             }
             ui.small(self.tr("fps-frames-warning"));
             ui.separator();
-            self.voice_properties(ui);
+            ui.small(self.tr("character-project-hint"));
+            if ui.button(self.tr("characters")).clicked() {
+                self.character_ui.open = true;
+            }
         }
         ui.separator();
         ui.strong(self.tr("layer-settings"));
@@ -314,6 +351,17 @@ impl App {
     }
 
     fn font_selector(&mut self, ui: &mut egui::Ui, settings: &mut TextSettings, target: Id) {
+        let mut state = std::mem::take(&mut self.fonts.search);
+        self.font_selector_with_state(ui, settings, target, &mut state);
+        self.fonts.search = state;
+    }
+    pub(super) fn font_selector_with_state(
+        &mut self,
+        ui: &mut egui::Ui,
+        settings: &mut TextSettings,
+        target: Id,
+        state: &mut super::searchable_combo_box::SearchState,
+    ) {
         use super::searchable_combo_box::{Choice, Labels, searchable_combo_box};
         use crate::media::fonts::FontId;
         if !self.fonts.loaded && !self.fonts.loading && self.fonts.error.is_none() {
@@ -342,7 +390,7 @@ impl App {
         if searchable_combo_box(
             ui,
             ("text-font", target),
-            &mut self.fonts.search,
+            state,
             &mut selected,
             &self.fonts.choices,
             Labels {
@@ -363,37 +411,14 @@ impl App {
                 ui.small(self.tr("font-loading"));
             });
         }
+        if !settings.font.as_os_str().is_empty() && !settings.font.is_file() {
+            ui.small(self.tr("text-font-missing"));
+        }
         if let Some(error) = self.fonts.error.clone() {
             ui.small(self.tr("font-list-failed")).on_hover_text(error);
             if ui.small_button(self.tr("font-retry")).clicked() {
                 self.request_fonts();
             }
         }
-    }
-    fn voice_properties(&mut self, ui: &mut egui::Ui) {
-        ui.strong("VOICEVOX");
-        if ui
-            .add_enabled(!self.connecting, egui::Button::new(self.tr("connect")))
-            .clicked()
-        {
-            self.connect();
-        }
-        if let Some(connection) = &self.connection {
-            ui.small(format!("VOICEVOX ENGINE {}", connection.version));
-        }
-        self.voice_speaker_selector(ui, "properties");
-        let speed = self.tr("speed");
-        let pitch = self.tr("pitch");
-        let intonation = self.tr("intonation");
-        let volume = self.tr("voice-volume");
-        let pre = self.tr("pre-phoneme");
-        let post = self.tr("post-phoneme");
-        ui.add(egui::Slider::new(&mut self.voice_settings.speed, 0.5..=2.0).text(speed));
-        ui.add(egui::Slider::new(&mut self.voice_settings.pitch, -0.15..=0.15).text(pitch));
-        ui.add(egui::Slider::new(&mut self.voice_settings.intonation, 0.0..=2.0).text(intonation));
-        ui.add(egui::Slider::new(&mut self.voice_settings.volume, 0.0..=2.0).text(volume));
-        ui.add(egui::Slider::new(&mut self.voice_settings.pre_phoneme, 0.0..=1.5).text(pre));
-        ui.add(egui::Slider::new(&mut self.voice_settings.post_phoneme, 0.0..=1.5).text(post));
-        ui.small(self.tr("voice-terms"));
     }
 }

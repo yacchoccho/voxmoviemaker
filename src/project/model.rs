@@ -7,7 +7,7 @@ use std::{
 use uuid::Uuid;
 
 pub type Id = Uuid;
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 pub const MAX_FRAME: u64 = 100_000_000;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,7 +91,9 @@ pub struct MediaAsset {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct VoicevoxSettings {
+    /// VOICEVOX API's `speaker` query parameter is a style ID.
     pub speaker: u32,
+    pub speaker_uuid: String,
     pub speaker_name: String,
     pub style_name: String,
     pub speed: f64,
@@ -100,11 +102,17 @@ pub struct VoicevoxSettings {
     pub volume: f64,
     pub pre_phoneme: f64,
     pub post_phoneme: f64,
+    pub pause_length: Option<f64>,
+    pub pause_scale: Option<f64>,
+    pub sampling_rate: u32,
+    pub stereo: bool,
+    pub interrogative_upspeak: bool,
 }
 impl Default for VoicevoxSettings {
     fn default() -> Self {
         Self {
             speaker: 0,
+            speaker_uuid: String::new(),
             speaker_name: String::new(),
             style_name: String::new(),
             speed: 1.0,
@@ -113,11 +121,29 @@ impl Default for VoicevoxSettings {
             volume: 1.0,
             pre_phoneme: 0.1,
             post_phoneme: 0.1,
+            pause_length: None,
+            pause_scale: None,
+            sampling_rate: 48000,
+            stereo: false,
+            interrogative_upspeak: true,
         }
     }
 }
 impl VoicevoxSettings {
+    pub fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
     pub fn validate(&self) -> Result<()> {
+        if self
+            .pause_length
+            .is_some_and(|v| !v.is_finite() || !(0.0..=10.0).contains(&v))
+            || self
+                .pause_scale
+                .is_some_and(|v| !v.is_finite() || !(0.0..=5.0).contains(&v))
+            || !(8000..=192000).contains(&self.sampling_rate)
+        {
+            return Err("invalid-voice-settings".into());
+        }
         for (v, min, max) in [
             (self.speed, 0.5, 2.0),
             (self.pitch, -0.15, 0.15),
@@ -144,7 +170,8 @@ pub enum ClipSource {
     Voicevox {
         asset_id: Id,
         text: String,
-        settings: VoicevoxSettings,
+        #[serde(default, skip_serializing_if = "VoicevoxSettings::is_default")]
+        settings: Box<VoicevoxSettings>,
         /// Optional on older projects; new synthesis creates an integrated subtitle.
         #[serde(default)]
         subtitle: Option<TextSettings>,
@@ -161,6 +188,8 @@ impl ClipSource {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Clip {
     pub id: Id,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character: Option<Box<crate::characters::CharacterBinding>>,
     pub source: ClipSource,
     pub timeline_start: u64,
     pub duration: u64,
@@ -192,6 +221,9 @@ pub struct TextSettings {
     pub subtitle: bool,
     pub font: PathBuf,
     pub font_index: u32,
+    /// Pixel anchor from the upper-left of the project canvas; None preserves legacy layout.
+    pub position: Option<[f64; 2]>,
+    pub opacity: f64,
     pub size: f32,
     pub color: [u8; 4],
     pub outline: [u8; 4],
@@ -206,6 +238,8 @@ impl Default for TextSettings {
             subtitle: true,
             font: PathBuf::new(),
             font_index: 0,
+            position: None,
+            opacity: 1.0,
             size: 48.0,
             color: [255; 4],
             outline: [0, 0, 0, 255],
@@ -218,6 +252,14 @@ impl Default for TextSettings {
 impl TextSettings {
     pub fn validate(&self) -> Result<()> {
         crate::assets::require_utf8_path(&self.font)?;
+        if self
+            .position
+            .is_some_and(|p| p.iter().any(|v| !v.is_finite() || v.abs() > 32768.0))
+            || !self.opacity.is_finite()
+            || !(0.0..=1.0).contains(&self.opacity)
+        {
+            return Err("invalid-text-clip".into());
+        }
         if self.text.len() > 16_384
             || self.text.chars().count() > 4096
             || !self.size.is_finite()
@@ -483,6 +525,12 @@ impl Project {
                 }
                 previous_end = clip.end();
                 clip.effects.validate(clip.duration)?;
+                if let Some(binding) = &clip.character {
+                    if matches!(clip.source, ClipSource::Media { .. }) {
+                        return Err("invalid-character".into());
+                    }
+                    binding.validate()?;
+                }
                 if let Some(asset_id) = clip.source.asset_id() {
                     let asset = assets.get(&asset_id).ok_or("missing-asset")?;
                     if asset.kind != MediaKind::Image

@@ -32,6 +32,7 @@ pub mod transport;
 
 #[derive(Clone)]
 pub struct VoiceRequest {
+    pub character: Option<Box<crate::characters::CharacterBinding>>,
     pub project: Id,
     pub track: Id,
     pub start: u64,
@@ -83,6 +84,8 @@ pub struct DragClip {
     pub track: usize,
 }
 pub struct App {
+    pub characters: crate::characters::CharacterStore,
+    pub character_ui: crate::ui::characters::CharacterUi,
     pub project: Project,
     pub saved: Project,
     pub project_path: Option<PathBuf>,
@@ -99,6 +102,7 @@ pub struct App {
     pub voice_text: String,
     pub voice_input_rect: Option<egui::Rect>,
     pub voice_ime_composing: bool,
+    /// Compatibility editor cache; new synthesis resolves settings from the character ID.
     pub voice_settings: VoicevoxSettings,
     pub fonts: fonts::FontCatalog,
     pub connection: Option<Connection>,
@@ -163,7 +167,11 @@ impl App {
         i18n.load_directory(&storage.config.join("locales"));
         i18n.language = settings.language.clone();
         let project = Project::default();
+        let characters = crate::characters::CharacterStore::load(&storage.config);
+        let warning = warning.or_else(|| characters.error.clone());
         let app = Self {
+            characters,
+            character_ui: Default::default(),
             saved: project.clone(),
             project,
             project_path: None,
@@ -294,7 +302,7 @@ impl App {
                 }) = self.project.clip(id)
             {
                 self.voice_text = text.clone();
-                self.voice_settings = settings.clone();
+                self.voice_settings = settings.as_ref().clone();
             }
             return;
         }
@@ -310,7 +318,7 @@ impl App {
         }) = self.project.clip(id)
         {
             self.voice_text = text.clone();
-            self.voice_settings = settings.clone();
+            self.voice_settings = settings.as_ref().clone();
         }
     }
     pub fn focus_clip(&mut self, id: Id) {
@@ -451,6 +459,41 @@ impl App {
             return;
         };
         let original = replace.and_then(|id| self.project.clip(id)).cloned();
+        let binding = if replace.is_some() {
+            original.as_ref().and_then(|c| c.character.clone())
+        } else {
+            let Some(id) = self.settings.character else {
+                self.status = self.tr("character-select-first");
+                return;
+            };
+            Some(Box::new(crate::characters::CharacterBinding::new(id)))
+        };
+        let voice_settings = if let Some(binding) = &binding {
+            let Some(settings) = self.report(binding.voice(&self.characters.library)) else {
+                return;
+            };
+            let Some(connection) = &self.connection else {
+                self.status = self.tr("voicevox-offline");
+                return;
+            };
+            if !connection.speakers.iter().any(|s| {
+                s.speaker_uuid == settings.speaker_uuid
+                    && s.styles.iter().any(|style| style.id == settings.speaker)
+            }) {
+                self.status = self.tr("character-voice-missing");
+                return;
+            }
+            settings
+        } else if let Some(Clip {
+            source: ClipSource::Voicevox { settings, .. },
+            ..
+        }) = &original
+        {
+            settings.as_ref().clone()
+        } else {
+            self.status = self.tr("character-select-first");
+            return;
+        };
         if let Some(id) = replace
             && self
                 .project
@@ -461,13 +504,14 @@ impl App {
             return;
         }
         let request = VoiceRequest {
+            character: binding,
             project: self.project.project_uuid,
             track,
             start: self.playhead,
             replace,
             original,
             text: self.voice_text.clone(),
-            settings: self.voice_settings.clone(),
+            settings: voice_settings,
             audition,
         };
         let storage = self.storage.clone();
@@ -553,21 +597,30 @@ impl App {
             .filter(|_| request.replace.is_some());
         let mut effects = original.map(|c| c.effects.clone()).unwrap_or_default();
         effects.clamp_duration(duration);
-        let subtitle = match original.map(|c| &c.source) {
-            Some(ClipSource::Voicevox { subtitle, .. }) => subtitle.clone(),
-            _ => Some(TextSettings::default()),
-        }
-        .map(|mut style| {
-            style.text = request.text.clone();
-            style.subtitle = true;
-            style
-        });
+        let subtitle = if request.character.is_some() {
+            None
+        } else {
+            match original.map(|c| &c.source) {
+                Some(ClipSource::Voicevox { subtitle, .. }) => subtitle.clone(),
+                _ => Some(TextSettings::default()),
+            }
+            .map(|mut style| {
+                style.text = request.text.clone();
+                style.subtitle = true;
+                style
+            })
+        };
         let clip = Clip {
+            character: request.character.clone(),
             id: clip_id,
             source: ClipSource::Voicevox {
                 asset_id: asset.id,
                 text: request.text,
-                settings: request.settings,
+                settings: if request.character.is_some() {
+                    VoicevoxSettings::default().into()
+                } else {
+                    request.settings.into()
+                },
                 subtitle,
             },
             timeline_start: start,
@@ -644,7 +697,11 @@ impl App {
             self.status = self.tr("ffmpeg-missing");
             return;
         };
-        let Some(plan) = self.report(RenderPlan::new(&self.project, &self.storage)) else {
+        let Some(plan) = self.report(RenderPlan::with_characters(
+            &self.project,
+            &self.storage,
+            &self.characters.library,
+        )) else {
             return;
         };
         let settings = self.settings.clone();
@@ -711,15 +768,6 @@ impl App {
                     if url == self.settings.voicevox_url {
                         self.connection =
                             self.report(result.map_err(|e| format!("voicevox-unavailable: {e}")));
-                        if let Some(speaker) =
-                            self.connection.as_ref().and_then(|c| c.speakers.first())
-                            && let Some(style) = speaker.styles.first()
-                            && self.voice_settings.speaker_name.is_empty()
-                        {
-                            self.voice_settings.speaker = style.id;
-                            self.voice_settings.speaker_name = speaker.name.clone();
-                            self.voice_settings.style_name = style.name.clone();
-                        }
                     }
                 }
                 Event::Imported(project, track, start, results) => {
@@ -807,7 +855,11 @@ impl App {
                 self.texture = None;
             }
             if self.tools.is_some()
-                && let Some(plan) = self.report(RenderPlan::new(&self.project, &self.storage))
+                && let Some(plan) = self.report(RenderPlan::with_characters(
+                    &self.project,
+                    &self.storage,
+                    &self.characters.library,
+                ))
             {
                 self.preview.pending = true;
                 self.preview_ticket = self.preview_worker.request(PreviewRequest {
@@ -859,6 +911,7 @@ impl App {
         self.report(result);
     }
     pub fn new_project(&mut self) {
+        self.reload_characters();
         self.finish_property_edit();
         self.resume_after_save = false;
         self.cancel_preview_transform();

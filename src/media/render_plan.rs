@@ -35,6 +35,14 @@ pub struct RenderPlan {
 }
 impl RenderPlan {
     pub fn new(project: &Project, storage: &Storage) -> Result<Self> {
+        let characters = crate::characters::CharacterStore::load(&storage.config);
+        Self::with_characters(project, storage, &characters.library)
+    }
+    pub fn with_characters(
+        project: &Project,
+        storage: &Storage,
+        characters: &crate::characters::CharacterLibrary,
+    ) -> Result<Self> {
         project.validate()?;
         let mut clips = Vec::new();
         let assets: HashMap<_, _> = project.assets.iter().map(|a| (a.id, a)).collect();
@@ -54,7 +62,10 @@ impl RenderPlan {
                     })
                     .transpose()?;
                 let text = match &clip.source {
-                    ClipSource::Text { settings } => Some(settings.clone()),
+                    ClipSource::Text { settings } => Some(clip.character.as_ref().map_or_else(
+                        || settings.clone(),
+                        |binding| binding.text(characters, &settings.text),
+                    )),
                     _ => None,
                 };
                 clips.push(RenderClip {
@@ -83,11 +94,18 @@ impl RenderPlan {
                 });
                 // One timeline object contributes audio and an aligned transparent visual.
                 // Keep it here, in this layer's order, for preview/proxy/export alike.
-                if let ClipSource::Voicevox {
-                    subtitle: Some(style),
-                    ..
-                } = &clip.source
-                {
+                let subtitle = if let ClipSource::Voicevox { text, subtitle, .. } = &clip.source {
+                    if let Some(binding) = &clip.character {
+                        binding
+                            .subtitle_enabled
+                            .then(|| binding.text(characters, text))
+                    } else {
+                        subtitle.clone()
+                    }
+                } else {
+                    None
+                };
+                if let Some(style) = subtitle {
                     clips.push(RenderClip {
                         id: clip.id,
                         path: PathBuf::new(),
@@ -102,7 +120,7 @@ impl RenderPlan {
                         video_stream: None,
                         audio_stream: None,
                         effects: clip.effects.clone(),
-                        text: Some(style.clone()),
+                        text: Some(style),
                     });
                 }
             }

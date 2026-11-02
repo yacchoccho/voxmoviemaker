@@ -22,6 +22,7 @@ pub enum ExportFormat {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    pub character: Option<crate::project::Id>,
     pub language: String,
     pub theme: Theme,
     pub ffmpeg: PathBuf,
@@ -42,6 +43,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            character: None,
             language: "ja-JP".into(),
             theme: Theme::System,
             ffmpeg: "ffmpeg".into(),

@@ -2,35 +2,6 @@ use crate::{app::App, project::ClipSource};
 use eframe::egui;
 
 impl App {
-    pub(super) fn voice_speaker_selector(&mut self, ui: &mut egui::Ui, location: &str) {
-        let Some(connection) = &self.connection else {
-            ui.small(self.tr("voicevox-offline"));
-            return;
-        };
-        egui::ComboBox::from_id_salt(("speaker-style", location))
-            .selected_text(format!(
-                "{} / {}",
-                self.voice_settings.speaker_name, self.voice_settings.style_name
-            ))
-            .show_ui(ui, |ui| {
-                for speaker in &connection.speakers {
-                    for style in &speaker.styles {
-                        if ui
-                            .selectable_label(
-                                self.voice_settings.speaker == style.id,
-                                format!("{} / {}", speaker.name, style.name),
-                            )
-                            .clicked()
-                        {
-                            self.voice_settings.speaker = style.id;
-                            self.voice_settings.speaker_name = speaker.name.clone();
-                            self.voice_settings.style_name = style.name.clone();
-                        }
-                    }
-                }
-            });
-    }
-
     pub fn voice_input(&mut self, ctx: &egui::Context) {
         let input_id = egui::Id::new("voice-input-editor");
         let focused = ctx.memory(|m| m.has_focus(input_id));
@@ -79,8 +50,13 @@ impl App {
         let font = egui::TextStyle::Body.resolve(&style);
         let row = ctx.fonts_mut(|fonts| fonts.row_height(&font));
         let rows = self.voice_text.split('\n').count().clamp(1, 8);
+        let toolbar_height = style
+            .spacing
+            .interact_size
+            .y
+            .max(row + style.spacing.button_padding.y * 2.0);
         let height = row * rows as f32
-            + style.spacing.interact_size.y * 2.0
+            + toolbar_height * 2.0
             + style.spacing.item_spacing.y * 2.0
             + 8.0
             + 12.0;
@@ -92,8 +68,28 @@ impl App {
             .exact_height(height)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(self.tr("speaker-style"));
-                    self.voice_speaker_selector(ui, "voice-input");
+                    ui.label(self.tr("character"));
+                    let mut selected = self.settings.character;
+                    let mut state = std::mem::take(&mut self.character_ui.generation_search);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(250.0, ui.spacing().interact_size.y),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            self.character_picker(
+                                ui,
+                                &mut selected,
+                                &mut state,
+                                "generation-character",
+                            );
+                        },
+                    );
+                    self.settings.character = selected;
+                    self.character_ui.generation_search = state;
+                    if ui.button(self.tr("characters")).clicked() {
+                        self.character_ui.open = true;
+                        self.character_ui.selected = self.settings.character;
+                        self.character_ui.draft = None;
+                    }
                     if ui
                         .add_enabled(!self.connecting, egui::Button::new(self.tr("connect")))
                         .clicked()
@@ -111,11 +107,21 @@ impl App {
                         ui.label(self.tr("generating"));
                     }
                     let active = !self.generating && !self.voice_text.trim().is_empty();
+                    let character_ready = self
+                        .settings
+                        .character
+                        .is_some_and(|id| self.characters.library.get(id).is_some());
                     audition = ui
-                        .add_enabled(active, egui::Button::new(self.tr("audition")))
+                        .add_enabled(
+                            active && character_ready,
+                            egui::Button::new(self.tr("audition")),
+                        )
                         .clicked();
                     generate = ui
-                        .add_enabled(active, egui::Button::new(self.tr("generate-insert")))
+                        .add_enabled(
+                            active && character_ready,
+                            egui::Button::new(self.tr("generate-insert")),
+                        )
                         .clicked();
                     let can_regenerate = self.selected.is_some_and(|id| {
                         self.project

@@ -11,7 +11,9 @@ impl App {
                 if p.tracks[index].locked {
                     return Err("track-locked".into());
                 }
-                if let ClipSource::Voicevox { text, subtitle, .. } =
+                if let Some(binding) = &mut p.clip_mut(id).ok_or("missing-clip")?.character {
+                    binding.subtitle_enabled = true;
+                } else if let ClipSource::Voicevox { text, subtitle, .. } =
                     &mut p.clip_mut(id).ok_or("missing-clip")?.source
                     && subtitle.is_none()
                 {
@@ -32,6 +34,7 @@ impl App {
         let start = self.playhead;
         let duration = self.project.frame_rate.frames(3.0);
         let clip = Clip {
+            character: None,
             id: Id::new_v4(),
             source: ClipSource::Text {
                 settings: TextSettings {

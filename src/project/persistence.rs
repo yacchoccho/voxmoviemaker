@@ -53,7 +53,7 @@ pub fn load(path: &Path) -> Result<Project> {
     })?;
     let mut project: Project = serde_json::from_str(&input).map_err(|e| e.to_string())?;
     // Preserve the appearance of old projects: missing integrated subtitles stay disabled.
-    if matches!(project.schema_version, 1 | 2) {
+    if matches!(project.schema_version, 1..=3) {
         project.schema_version = super::SCHEMA_VERSION;
     }
     let parent = path

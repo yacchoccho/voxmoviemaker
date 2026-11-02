@@ -107,7 +107,11 @@ impl App {
             self.status = self.tr("empty-project");
             return;
         }
-        let Some(plan) = self.report(RenderPlan::new(&self.project, &self.storage)) else {
+        let Some(plan) = self.report(RenderPlan::with_characters(
+            &self.project,
+            &self.storage,
+            &self.characters.library,
+        )) else {
             return;
         };
         if self.playhead >= plan.duration {

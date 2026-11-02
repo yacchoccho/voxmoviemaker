@@ -83,6 +83,7 @@ impl Drop for Fixture {
 }
 fn add(p: &mut Project, a: MediaAsset, track: usize) {
     let c = Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Media { asset_id: a.id },
         timeline_start: 0,

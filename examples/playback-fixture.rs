@@ -37,6 +37,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         image.save(&path)?;
         let asset = ffprobe::probe(std::path::Path::new("ffprobe"), &path)?;
         project.tracks[track].clips.push(Clip {
+            character: None,
             id: Id::new_v4(),
             source: ClipSource::Media { asset_id: asset.id },
             timeline_start: start,
@@ -66,6 +67,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     wav.finalize()?;
     let asset = ffprobe::probe(std::path::Path::new("ffprobe"), &path)?;
     project.tracks[2].clips.push(Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Media { asset_id: asset.id },
         timeline_start: 0,
@@ -92,6 +94,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             (4, "VoxMovieMaker\nPhase 5", 64.0, TextAnchor::Center),
         ] {
             project.tracks[track].clips.push(Clip {
+                character: None,
                 id: Id::new_v4(),
                 source: ClipSource::Text {
                     settings: TextSettings {

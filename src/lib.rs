@@ -1,5 +1,6 @@
 pub mod app;
 pub mod assets;
+pub mod characters;
 pub mod i18n;
 pub mod media;
 pub mod project;

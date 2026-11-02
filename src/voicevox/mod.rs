@@ -133,12 +133,47 @@ impl Client {
         ] {
             query[key] = json!(value);
         }
-        query["outputSamplingRate"] = json!(48000);
-        query["outputStereo"] = json!(false);
-        let wav = self
+        for (key, value) in [
+            ("pauseLength", settings.pause_length),
+            ("pauseLengthScale", settings.pause_scale),
+        ] {
+            if let Some(value) = value {
+                if query.get(key).is_none() {
+                    return Err(format!("unsupported-voice-property: {key}"));
+                }
+                query[key] = json!(value);
+            }
+        }
+        query["outputSamplingRate"] = json!(settings.sampling_rate);
+        query["outputStereo"] = json!(settings.stereo);
+        let mut synthesis = self
             .agent
             .post(format!("{}/synthesis", self.base))
-            .query("speaker", settings.speaker.to_string())
+            .query("speaker", settings.speaker.to_string());
+        if !settings.interrogative_upspeak {
+            let schema: Value = self
+                .agent
+                .get(format!("{}/openapi.json", self.base))
+                .call()
+                .map_err(|e| format!("unsupported-voice-property: {e}"))?
+                .body_mut()
+                .with_config()
+                .limit(8 * 1024 * 1024)
+                .read_json()
+                .map_err(|e| e.to_string())?;
+            if !schema["paths"]["/synthesis"]["post"]["parameters"]
+                .as_array()
+                .is_some_and(|params| {
+                    params
+                        .iter()
+                        .any(|p| p["name"] == "enable_interrogative_upspeak" && p["in"] == "query")
+                })
+            {
+                return Err("unsupported-voice-property: enable_interrogative_upspeak".into());
+            }
+            synthesis = synthesis.query("enable_interrogative_upspeak", "false");
+        }
+        let wav = synthesis
             .send_json(&query)
             .map_err(|e| e.to_string())?
             .body_mut()

@@ -47,6 +47,7 @@ impl App {
                 return;
             };
             let clip = Clip {
+                character: None,
                 id: Id::new_v4(),
                 source: ClipSource::Media { asset_id: asset.id },
                 timeline_start: cursor,

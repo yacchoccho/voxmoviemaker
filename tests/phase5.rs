@@ -62,6 +62,7 @@ impl Fixture {
             audio_stream: None,
         });
         let clip = Clip {
+            character: None,
             id: Id::new_v4(),
             source: ClipSource::Media { asset_id: id },
             timeline_start: start,
@@ -83,6 +84,7 @@ impl Drop for Fixture {
 }
 fn text_clip(value: &str) -> Clip {
     Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Text {
             settings: TextSettings {
@@ -476,6 +478,7 @@ fn portable_voice_project_reloads_after_moving_without_original_wav() {
     .unwrap();
     let original = f.storage.resolve(project.project_uuid, &voice);
     project.tracks[0].clips.push(Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Voicevox {
             asset_id: voice.id,
@@ -764,6 +767,7 @@ fn combined_voice(f: &Fixture, project: &mut Project) -> Id {
         audio_stream: Some(0),
     };
     let clip = Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Voicevox {
             asset_id: asset.id,

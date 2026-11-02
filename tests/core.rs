@@ -64,6 +64,7 @@ fn asset(temp: &Temp, name: &str, kind: MediaKind) -> MediaAsset {
 }
 fn clip(asset: &MediaAsset, start: u64, duration: u64) -> Clip {
     Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Media { asset_id: asset.id },
         timeline_start: start,

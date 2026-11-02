@@ -33,6 +33,7 @@ impl Drop for Fixture {
 }
 fn text_clip(start: u64) -> Clip {
     Clip {
+        character: None,
         id: Id::new_v4(),
         source: ClipSource::Text {
             settings: TextSettings::default(),

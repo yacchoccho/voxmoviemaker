@@ -248,11 +248,17 @@ impl App {
                         let title = match &clip.source {
                             ClipSource::Voicevox { text, subtitle, .. } => format!(
                                 "{} · {text}",
-                                self.tr(if subtitle.is_some() {
-                                    "voice-with-subtitle"
-                                } else {
-                                    "voice-only"
-                                })
+                                self.tr(
+                                    if clip
+                                        .character
+                                        .as_ref()
+                                        .map_or(subtitle.is_some(), |b| b.subtitle_enabled)
+                                    {
+                                        "voice-with-subtitle"
+                                    } else {
+                                        "voice-only"
+                                    }
+                                )
                             ),
                             ClipSource::Text { settings } => format!(
                                 "{} · {}",

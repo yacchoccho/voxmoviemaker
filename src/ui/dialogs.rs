@@ -197,6 +197,7 @@ impl App {
                 match dialog.mode {
                     PathMode::Open => {
                         if let Some(project) = self.report(persistence::load(&path)) {
+                            self.reload_characters();
                             self.finish_property_edit();
                             self.cancel_preview_transform();
                             self.stop_audio();

@@ -71,6 +71,7 @@ impl Fixture {
             image.save(&path).unwrap();
             let asset = ffprobe::probe(&self.settings.ffprobe, &path).unwrap();
             project.tracks[track].clips.push(Clip {
+                character: None,
                 id: Id::new_v4(),
                 source: ClipSource::Media { asset_id: asset.id },
                 timeline_start: start,
@@ -102,11 +103,12 @@ impl Fixture {
         wav.finalize().unwrap();
         let asset = ffprobe::probe(&self.settings.ffprobe, &path).unwrap();
         project.tracks[2].clips.push(Clip {
+            character: None,
             id: Id::new_v4(),
             source: ClipSource::Voicevox {
                 asset_id: asset.id,
                 text: "synthetic test tone".into(),
-                settings: VoicevoxSettings::default(),
+                settings: Default::default(),
                 subtitle: None,
             },
             timeline_start: 0,

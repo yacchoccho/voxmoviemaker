@@ -171,17 +171,35 @@ pub fn rasterize(
     if total_height > h as f32 - 2.0 * padding {
         return Err("text-layout-overflow".into());
     }
-    let top = match settings.anchor {
-        TextAnchor::Top => padding,
-        TextAnchor::Center => (h as f32 - total_height) / 2.0,
-        TextAnchor::Bottom => h as f32 - padding - total_height,
+    let top = if let Some([_, y]) = settings.position {
+        let y = y as f32 * unit;
+        y - match settings.anchor {
+            TextAnchor::Top => 0.0,
+            TextAnchor::Center => total_height / 2.0,
+            TextAnchor::Bottom => total_height,
+        }
+    } else {
+        match settings.anchor {
+            TextAnchor::Top => padding,
+            TextAnchor::Center => (h as f32 - total_height) / 2.0,
+            TextAnchor::Bottom => h as f32 - padding - total_height,
+        }
     };
     let mut mask = vec![0u8; w as usize * h as usize];
     for (row, (glyphs, line_width)) in lines.into_iter().enumerate() {
-        let left = match settings.align {
-            TextAlign::Left => padding,
-            TextAlign::Center => (w as f32 - line_width) / 2.0,
-            TextAlign::Right => w as f32 - padding - line_width,
+        let left = if let Some([x, _]) = settings.position {
+            let x = x as f32 * unit;
+            x - match settings.align {
+                TextAlign::Left => 0.0,
+                TextAlign::Center => line_width / 2.0,
+                TextAlign::Right => line_width,
+            }
+        } else {
+            match settings.align {
+                TextAlign::Left => padding,
+                TextAlign::Center => (w as f32 - line_width) / 2.0,
+                TextAlign::Right => w as f32 - padding - line_width,
+            }
         };
         for (id, x) in glyphs {
             let glyph = id.with_scale_and_position(
@@ -246,7 +264,7 @@ pub fn rasterize(
                 / combined)
                 .round() as u8;
         }
-        pixel[3] = (combined * 255.0).round() as u8;
+        pixel[3] = (combined * 255.0 * settings.opacity as f32).round() as u8;
         image::Rgba(pixel)
     }))
 }

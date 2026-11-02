@@ -320,31 +320,8 @@ impl App {
         }
         if let Some(connection) = &self.connection {
             ui.small(format!("VOICEVOX ENGINE {}", connection.version));
-            egui::ComboBox::from_id_salt("speaker-style")
-                .selected_text(format!(
-                    "{} / {}",
-                    self.voice_settings.speaker_name, self.voice_settings.style_name
-                ))
-                .show_ui(ui, |ui| {
-                    for speaker in &connection.speakers {
-                        for style in &speaker.styles {
-                            if ui
-                                .selectable_label(
-                                    self.voice_settings.speaker == style.id,
-                                    format!("{} / {}", speaker.name, style.name),
-                                )
-                                .clicked()
-                            {
-                                self.voice_settings.speaker = style.id;
-                                self.voice_settings.speaker_name = speaker.name.clone();
-                                self.voice_settings.style_name = style.name.clone();
-                            }
-                        }
-                    }
-                });
-        } else {
-            ui.small(self.tr("voicevox-offline"));
         }
+        self.voice_speaker_selector(ui, "properties");
         let speed = self.tr("speed");
         let pitch = self.tr("pitch");
         let intonation = self.tr("intonation");

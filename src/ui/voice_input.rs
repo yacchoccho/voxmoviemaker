@@ -2,6 +2,35 @@ use crate::{app::App, project::ClipSource};
 use eframe::egui;
 
 impl App {
+    pub(super) fn voice_speaker_selector(&mut self, ui: &mut egui::Ui, location: &str) {
+        let Some(connection) = &self.connection else {
+            ui.small(self.tr("voicevox-offline"));
+            return;
+        };
+        egui::ComboBox::from_id_salt(("speaker-style", location))
+            .selected_text(format!(
+                "{} / {}",
+                self.voice_settings.speaker_name, self.voice_settings.style_name
+            ))
+            .show_ui(ui, |ui| {
+                for speaker in &connection.speakers {
+                    for style in &speaker.styles {
+                        if ui
+                            .selectable_label(
+                                self.voice_settings.speaker == style.id,
+                                format!("{} / {}", speaker.name, style.name),
+                            )
+                            .clicked()
+                        {
+                            self.voice_settings.speaker = style.id;
+                            self.voice_settings.speaker_name = speaker.name.clone();
+                            self.voice_settings.style_name = style.name.clone();
+                        }
+                    }
+                }
+            });
+    }
+
     pub fn voice_input(&mut self, ctx: &egui::Context) {
         let input_id = egui::Id::new("voice-input-editor");
         let focused = ctx.memory(|m| m.has_focus(input_id));
@@ -51,8 +80,8 @@ impl App {
         let row = ctx.fonts_mut(|fonts| fonts.row_height(&font));
         let rows = self.voice_text.split('\n').count().clamp(1, 8);
         let height = row * rows as f32
-            + style.spacing.interact_size.y
-            + style.spacing.item_spacing.y
+            + style.spacing.interact_size.y * 2.0
+            + style.spacing.item_spacing.y * 2.0
             + 8.0
             + 12.0;
         let mut generate = false;
@@ -62,6 +91,19 @@ impl App {
             .resizable(false)
             .exact_height(height)
             .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(self.tr("speaker-style"));
+                    self.voice_speaker_selector(ui, "voice-input");
+                    if ui
+                        .add_enabled(!self.connecting, egui::Button::new(self.tr("connect")))
+                        .clicked()
+                    {
+                        self.connect();
+                    }
+                    if self.connecting {
+                        ui.spinner();
+                    }
+                });
                 ui.horizontal(|ui| {
                     ui.strong(self.tr("voice-input"));
                     if self.generating {

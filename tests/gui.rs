@@ -450,6 +450,82 @@ fn focus_voice_input(f: &mut Fixture) {
 }
 
 #[test]
+fn speaker_selection_above_voice_input_shares_settings_with_properties() {
+    use voxmoviemaker::voicevox::{Connection, Speaker, Style};
+    for select_image in [false, true] {
+        let mut f = Fixture::new();
+        f.app.connection = Some(Connection {
+            version: "test".into(),
+            speakers: vec![
+                Speaker {
+                    name: "First speaker".into(),
+                    speaker_uuid: "first".into(),
+                    styles: vec![Style {
+                        id: 1,
+                        name: "Normal".into(),
+                        style_type: None,
+                    }],
+                },
+                Speaker {
+                    name: "Second speaker".into(),
+                    speaker_uuid: "second".into(),
+                    styles: vec![Style {
+                        id: 2,
+                        name: "Soft".into(),
+                        style_type: None,
+                    }],
+                },
+            ],
+        });
+        f.app.voice_settings.speaker = 1;
+        f.app.voice_settings.speaker_name = "First speaker".into();
+        f.app.voice_settings.style_name = "Normal".into();
+        if select_image {
+            let id = f.image_clip(0);
+            f.app.select(id);
+        }
+        f.app.voice_text = "Keep this text".into();
+        f.frame(vec![]);
+        let output = f.frame(vec![]);
+        let input = f.app.voice_input_rect.unwrap();
+        let timeline = f.app.timeline_rect.unwrap();
+        let selector = output
+            .shapes
+            .iter()
+            .filter_map(|s| text_position(&s.shape, "First speaker / Normal"))
+            .find(|p| p.y > timeline.bottom() && p.y < input.top())
+            .expect("speaker selector must be above the text input");
+        f.frame(vec![Event::PointerMoved(selector)]);
+        f.frame(vec![Fixture::button(selector, true)]);
+        f.frame(vec![Fixture::button(selector, false)]);
+        let popup = f.frame(vec![]);
+        let option = popup
+            .shapes
+            .iter()
+            .find_map(|s| text_position(&s.shape, "Second speaker / Soft"))
+            .expect("speaker and style must be selectable");
+        f.frame(vec![Event::PointerMoved(option)]);
+        f.frame(vec![Fixture::button(option, true)]);
+        f.frame(vec![Fixture::button(option, false)]);
+        assert_eq!(f.app.voice_settings.speaker, 2);
+        assert_eq!(f.app.voice_settings.speaker_name, "Second speaker");
+        assert_eq!(f.app.voice_settings.style_name, "Soft");
+        assert_eq!(f.app.voice_text, "Keep this text");
+        f.app.selected = None;
+        let output = f.frame(vec![]);
+        assert_eq!(
+            output
+                .shapes
+                .iter()
+                .filter(|s| text_position(&s.shape, "Second speaker / Soft").is_some())
+                .count(),
+            2,
+            "input and properties selectors must display the same setting"
+        );
+    }
+}
+
+#[test]
 fn voice_input_starts_on_one_row_and_shift_enter_adds_rows() {
     let mut f = Fixture::new();
     focus_voice_input(&mut f);

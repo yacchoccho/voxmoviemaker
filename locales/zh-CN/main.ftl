@@ -65,6 +65,7 @@ layer-order-hint = 下方图层显示在前方。可从文件管理器直接拖�
 drop-hint = 也可将文件直接拖到时间轴图层。多个文件会依次排列。
 drop-fallback = 无法获取放置坐标：将在当前图层的播放头处插入。
 voice-input = VOICEVOX朗读文本
+speaker-style = 说话人 / 风格
 voice-placeholder = 输入要合成的文本…
 audition = 试听
 generate-insert = 生成并插入

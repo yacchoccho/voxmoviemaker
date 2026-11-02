@@ -65,6 +65,7 @@ layer-order-hint = Lower layers appear in front. Drag files from your file manag
 drop-hint = Alternatively, drop files directly onto a timeline layer. Multiple files are placed sequentially.
 drop-fallback = Drop coordinates unavailable: inserting on selected layer at playhead.
 voice-input = VOICEVOX text
+speaker-style = Speaker / style
 voice-placeholder = Enter text to synthesize…
 audition = Audition
 generate-insert = Generate and insert

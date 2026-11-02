@@ -65,6 +65,7 @@ layer-order-hint = 下のレイヤーほど前面。ファイルマネージャ�
 drop-hint = タイムラインへ直接ドロップすることもできます。複数ファイルは順番に配置します。
 drop-fallback = ドロップ座標を取得できないため、選択レイヤーの再生ヘッド位置へ挿入します。
 voice-input = VOICEVOX 読み上げテキスト
+speaker-style = 話者・スタイル
 voice-placeholder = 読み上げたい文章を入力してください…
 audition = 試聴
 generate-insert = 生成して配置

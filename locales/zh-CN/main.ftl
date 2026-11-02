@@ -245,3 +245,4 @@ select-export-path = 使用此保存位置
 no-export-path = 请选择保存位置
 choose-project-path = 选择项目保存位置
 save-location = 保存位置
+non-utf8-path = 文件或文件夹名称不是有效的UTF-8。请重命名后重新选择。

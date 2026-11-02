@@ -25,6 +25,7 @@ use std::{
 };
 mod import;
 mod package;
+mod property_edit;
 mod text;
 pub mod transport;
 
@@ -107,6 +108,9 @@ pub struct App {
     pub transport: transport::Transport,
     pub preview: crate::ui::preview::PreviewState,
     pub show_settings: bool,
+    pub settings_data_path: Option<String>,
+    pub property_edit: Option<property_edit::PropertyEdit>,
+    pub resume_after_save: bool,
     pub show_about: bool,
     pub path_dialog: Option<PathDialog>,
     pub file_picker: Option<crate::ui::file_picker::FilePicker>,
@@ -184,6 +188,9 @@ impl App {
             transport: transport::Transport::new(ctx.clone()),
             preview: Default::default(),
             show_settings: false,
+            settings_data_path: None,
+            property_edit: None,
+            resume_after_save: false,
             show_about: false,
             path_dialog: None,
             file_picker: None,
@@ -272,6 +279,9 @@ impl App {
         self.track = self.track.min(self.project.tracks.len().saturating_sub(1));
     }
     pub fn select(&mut self, id: Id) {
+        if self.selected != Some(id) {
+            self.finish_property_edit();
+        }
         if self.selected == Some(id) {
             if self.voice_text.is_empty()
                 && let Some(Clip {
@@ -571,6 +581,7 @@ impl App {
             return false;
         }
         let replace = request.replace;
+        self.finish_preview_transform();
         let result = self.history.edit(&mut self.project, move |p| {
             let destination = if replace.is_some() {
                 target
@@ -617,8 +628,7 @@ impl App {
     }
     pub fn stop_audio(&mut self) {
         if let Some(mut child) = self.playback.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+            media::ffmpeg::terminate(&mut child);
         }
     }
     pub fn start_export(&mut self, target: PathBuf, ctx: &egui::Context) {
@@ -808,7 +818,7 @@ impl App {
         if let Some(child) = &mut self.playback {
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    self.playback = None;
+                    self.stop_audio();
                     if !status.success() {
                         self.status = self.tr("audio-playback-failed");
                     }
@@ -826,6 +836,8 @@ impl App {
         self.report(result);
     }
     pub fn new_project(&mut self) {
+        self.finish_property_edit();
+        self.resume_after_save = false;
         self.cancel_preview_transform();
         self.file_picker = None;
         self.stop_audio();

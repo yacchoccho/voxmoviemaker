@@ -71,7 +71,14 @@ impl Settings {
             Ok(bytes) => match serde_json::from_str::<Self>(&bytes) {
                 Ok(mut settings) => {
                     settings.sanitize();
-                    (settings, None)
+                    let warning = settings
+                        .data_override
+                        .as_ref()
+                        .and_then(|path| storage.validate_data_root(path).err());
+                    if warning.is_some() {
+                        settings.data_override = None;
+                    }
+                    (settings, warning)
                 }
                 Err(e) => (Self::default(), Some(format!("settings-corrupt: {e}"))),
             },

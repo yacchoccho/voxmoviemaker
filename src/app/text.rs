@@ -54,6 +54,7 @@ impl App {
         };
         let id = clip.id;
         let preferred = self.track;
+        self.finish_preview_transform();
         let result = self.history.edit(&mut self.project, |p| {
             let destination = commands::placement_track(p, preferred, start, duration)?;
             commands::insert(p, destination, clip)?;

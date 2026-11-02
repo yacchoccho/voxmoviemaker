@@ -45,6 +45,16 @@ impl Storage {
             ),
         })
     }
+    pub fn validate_data_root(&self, path: &Path) -> Result<()> {
+        require_utf8_path(path)?;
+        ensure_outside_git(path)?;
+        let path = resolved_path(path)?;
+        let cache = resolved_path(&self.cache)?;
+        if path.starts_with(&cache) || cache.starts_with(&path) {
+            return Err("data-cache-overlap".into());
+        }
+        Ok(())
+    }
     pub fn voice_path(&self, project: Id, voice: Id) -> PathBuf {
         self.data
             .join("projects")
@@ -59,13 +69,7 @@ impl Storage {
         }
     }
     pub fn save_voice(&self, project: Id, voice: Id, wav: &[u8]) -> Result<PathBuf> {
-        ensure_outside_git(&self.data)?;
-        // Persistent assets and disposable caches must never share a root (including symlinks).
-        if resolved_path(&self.data)?.starts_with(resolved_path(&self.cache)?)
-            || resolved_path(&self.cache)?.starts_with(resolved_path(&self.data)?)
-        {
-            return Err("data-cache-overlap".into());
-        }
+        self.validate_data_root(&self.data)?;
         let path = self.voice_path(project, voice);
         let parent = path.parent().ok_or("invalid-path")?;
         ensure_outside_git(parent)?;
@@ -116,6 +120,13 @@ pub fn ensure_outside_git(path: &Path) -> Result<()> {
         {
             return Err("voice-storage-in-git".into());
         }
+    }
+    Ok(())
+}
+
+pub fn require_utf8_path(path: &Path) -> Result<()> {
+    if path.to_str().is_none() {
+        return Err("non-utf8-path".into());
     }
     Ok(())
 }

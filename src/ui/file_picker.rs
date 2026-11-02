@@ -1,7 +1,11 @@
 //! Optional OS chooser, with a Rust folder browser when Zenity is unavailable.
 //! Neither Zenity nor its libraries are linked, installed, or distributed by this app.
 use crate::{
-    Result, app::PathMode, i18n::I18n, media::ffmpeg::protect_child, project::Id,
+    Result,
+    app::PathMode,
+    i18n::I18n,
+    media::ffmpeg::{OwnedProcess, protect_child},
+    project::Id,
     tasks::LatestWorker,
 };
 use eframe::egui;
@@ -10,7 +14,7 @@ use std::{
     io::Read,
     os::unix::ffi::OsStringExt,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     sync::mpsc::{self, Receiver},
     thread,
     time::Duration,
@@ -25,13 +29,12 @@ pub struct FilePicker {
     browser: Browser,
 }
 struct NativePicker {
-    child: Child,
+    child: OwnedProcess,
     output: Receiver<Vec<u8>>,
 }
 impl Drop for NativePicker {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.terminate();
     }
 }
 struct Entry {
@@ -163,13 +166,16 @@ impl FilePicker {
         };
         if let Some(native) = &mut self.native {
             match native.child.try_wait() {
-                Ok(Some(status)) if status.success() => match native.output.try_recv() {
-                    Ok(bytes) => return Some(parse_selection(bytes, saving).map(Some)),
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        return Some(Err("invalid-path".into()));
+                Ok(Some(status)) if status.success() => {
+                    native.child.terminate();
+                    match native.output.try_recv() {
+                        Ok(bytes) => return Some(parse_selection(bytes, saving).map(Some)),
+                        Err(mpsc::TryRecvError::Disconnected) => {
+                            return Some(Err("invalid-path".into()));
+                        }
+                        Err(mpsc::TryRecvError::Empty) => {}
                     }
-                    Err(mpsc::TryRecvError::Empty) => {}
-                },
+                }
                 Ok(Some(status)) if status.code() == Some(1) => return Some(Ok(None)),
                 Ok(Some(_)) | Err(_) => {
                     self.native = None;
@@ -359,10 +365,10 @@ fn native_picker(title: &str, filename: Option<&Path>) -> Option<NativePicker> {
         command.args(["--save", "--filename"]).arg(filename);
     }
     protect_child(&mut command);
-    command.spawn().ok().and_then(|mut child| {
+    command.spawn().ok().and_then(|child| {
+        let mut child = OwnedProcess::new(child);
         let Some(stdout) = child.stdout.take() else {
-            let _ = child.kill();
-            let _ = child.wait();
+            child.terminate();
             return None;
         };
         let (sender, output) = mpsc::channel();

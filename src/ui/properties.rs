@@ -178,7 +178,7 @@ impl App {
                     self.status = self.tr("trim-outside-source");
                 } else {
                     let id = clip.id;
-                    self.edit(|p| {
+                    self.edit_property(ui.ctx(), id, |p| {
                         *p.clip_mut(id).ok_or("missing-clip")? = clip;
                         Ok(())
                     });
@@ -213,7 +213,7 @@ impl App {
                 ui.add(egui::DragValue::new(&mut height).range(2..=4320).speed(2.0));
             });
             if width != self.project.width || height != self.project.height {
-                self.edit(|p| {
+                self.edit_property(ui.ctx(), self.project.project_uuid, |p| {
                     p.width = width / 2 * 2;
                     p.height = height / 2 * 2;
                     Ok(())
@@ -239,7 +239,7 @@ impl App {
                     }
                 });
             if fps != self.project.frame_rate {
-                self.edit(|p| {
+                self.edit_property(ui.ctx(), self.project.project_uuid, |p| {
                     p.frame_rate = fps;
                     Ok(())
                 });
@@ -260,7 +260,7 @@ impl App {
             ui.checkbox(&mut track.locked, self.tr("locked"));
             if original != track {
                 let index = self.track;
-                self.edit(|p| {
+                self.edit_property(ui.ctx(), track.id, |p| {
                     p.tracks[index] = track;
                     Ok(())
                 });

@@ -11,7 +11,6 @@ use std::{
     fs,
     hash::{Hash, Hasher},
     io::{BufRead, BufReader, Read},
-    os::fd::AsRawFd,
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     process::Command,
@@ -393,9 +392,14 @@ fn input(binary: &Path, proxy: &Proxy, start: u64) -> Command {
         .args(["-ss", &proxy.fps.timestamp(start - input_start)]);
     command
 }
-fn send_frame(sender: &SyncSender<VideoFrame>, mut frame: VideoFrame, state: &Shared) -> bool {
+fn send_frame(
+    sender: &SyncSender<VideoFrame>,
+    mut frame: VideoFrame,
+    state: &Shared,
+    stop: &AtomicBool,
+) -> bool {
     loop {
-        if state.cancel.load(Ordering::Relaxed) {
+        if state.cancel.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
             return false;
         }
         match sender.try_send(frame) {
@@ -439,6 +443,7 @@ fn video(
         Duration::from_secs_f64(proxy.fps.seconds(proxy.duration - start) + 30.0),
         || flag.cancel.load(Ordering::Relaxed),
         move |mut stdout| -> Result<()> {
+            let stop = stdout.stop_flag();
             let mut frame = start;
             loop {
                 let mut rgba = vec![0; bytes];
@@ -452,7 +457,7 @@ fn video(
                 if frame + 1 < due {
                     state.skipped.fetch_add(1, Ordering::Relaxed);
                 } else {
-                    if !send_frame(&sender, VideoFrame { frame, rgba }, &state) {
+                    if !send_frame(&sender, VideoFrame { frame, rgba }, &state, &stop) {
                         return Ok(());
                     }
                     ctx.request_repaint();
@@ -499,12 +504,13 @@ fn audio_stream(
         Duration::from_secs_f64(proxy.fps.seconds(proxy.duration - start) + 30.0),
         || flag.cancel.load(Ordering::Relaxed),
         move |mut stdout| -> Result<()> {
+            let stop = stdout.stop_flag();
             let result: Result<()> = (|| {
                 // A seek can start the next decoder before the old audio thread
                 // finishes. Wait off the UI thread before opening an exclusive PCM.
                 let deadline = Instant::now() + Duration::from_secs(2);
                 let _owner = loop {
-                    if state.cancel.load(Ordering::Relaxed) {
+                    if state.cancel.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
                         return Ok(());
                     }
                     if let Ok(owner) = AUDIO_OWNER.try_lock() {
@@ -518,7 +524,7 @@ fn audio_stream(
                 let mut output = AudioDevice::open(&device)?;
                 let deadline = Instant::now() + Duration::from_secs(15);
                 while !state.ready.load(Ordering::Acquire) {
-                    if state.cancel.load(Ordering::Relaxed) {
+                    if state.cancel.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
                         return Ok(());
                     }
                     if Instant::now() > deadline {
@@ -528,22 +534,15 @@ fn audio_stream(
                 }
                 // A pipe read must not prevent clock updates or cancellation
                 // when decoding stalls. PCM memory stays independent of duration.
-                let fd = stdout.as_raw_fd();
-                // SAFETY: the owned pipe remains open throughout this callback.
-                let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-                if flags < 0
-                    || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0
-                {
-                    return Err(std::io::Error::last_os_error().to_string());
-                }
+                stdout.nonblocking();
                 let mut buffer = [0; 7680]; // 40ms stereo S16_LE.
                 loop {
-                    if state.cancel.load(Ordering::Relaxed) {
+                    if state.cancel.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
                         return Ok(());
                     }
                     let mut filled = 0;
                     while filled < buffer.len() {
-                        if state.cancel.load(Ordering::Relaxed) {
+                        if state.cancel.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
                             return Ok(());
                         }
                         let count = match stdout.read(&mut buffer[filled..]) {
@@ -571,7 +570,7 @@ fn audio_stream(
                     }
                     let mut cursor = 0;
                     while cursor < filled {
-                        if state.cancel.load(Ordering::Relaxed) {
+                        if state.cancel.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
                             return Ok(());
                         }
                         cursor += output.write(&buffer[cursor..filled])? * 4;
@@ -594,7 +593,7 @@ fn audio_stream(
                 // plugins even in nonblocking mode, so use cancellable writes.
                 let silence = [0; 7680];
                 loop {
-                    if state.cancel.load(Ordering::Relaxed) {
+                    if state.cancel.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
                         return Ok(());
                     }
                     if Instant::now() > deadline {

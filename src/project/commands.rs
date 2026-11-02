@@ -1,41 +1,6 @@
+pub use super::history::History;
 use super::*;
 use crate::Result;
-use std::collections::VecDeque;
-
-#[derive(Default)]
-pub struct History {
-    undo: VecDeque<Project>,
-    redo: Vec<Project>,
-}
-impl History {
-    pub fn edit<T>(
-        &mut self,
-        project: &mut Project,
-        edit: impl FnOnce(&mut Project) -> Result<T>,
-    ) -> Result<T> {
-        let mut next = project.clone();
-        let value = edit(&mut next)?;
-        next.validate()?;
-        if next != *project {
-            self.undo.push_back(std::mem::replace(project, next));
-            if self.undo.len() > 50 {
-                self.undo.pop_front();
-            }
-            self.redo.clear();
-        }
-        Ok(value)
-    }
-    pub fn undo(&mut self, project: &mut Project) {
-        if let Some(previous) = self.undo.pop_back() {
-            self.redo.push(std::mem::replace(project, previous));
-        }
-    }
-    pub fn redo(&mut self, project: &mut Project) {
-        if let Some(next) = self.redo.pop() {
-            self.undo.push_back(std::mem::replace(project, next));
-        }
-    }
-}
 /// Select a layer for NEW content, preserving its requested time and all existing clips.
 /// Call inside History::edit so layer creation and insertion commit together.
 pub fn placement_track(

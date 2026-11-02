@@ -1,6 +1,9 @@
 use crate::Result;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 use uuid::Uuid;
 
 pub type Id = Uuid;
@@ -214,6 +217,7 @@ impl Default for TextSettings {
 }
 impl TextSettings {
     pub fn validate(&self) -> Result<()> {
+        crate::assets::require_utf8_path(&self.font)?;
         if self.text.len() > 16_384
             || self.text.chars().count() > 4096
             || !self.size.is_finite()
@@ -441,7 +445,12 @@ impl Project {
             return Err("invalid-project".into());
         }
         let mut ids = HashSet::new();
+        let mut assets = HashMap::new();
         for asset in &self.assets {
+            if let AssetLocation::External(path) = &asset.location {
+                crate::assets::require_utf8_path(path)?;
+            }
+            assets.insert(asset.id, asset);
             if !ids.insert(asset.id)
                 || !asset.duration_seconds.is_finite()
                 || asset.duration_seconds < 0.0
@@ -454,9 +463,15 @@ impl Project {
             if !ids.insert(track.id) || track.clips.len() > 10_000 {
                 return Err("invalid-track".into());
             }
-            for clip in &track.clips {
+            let mut clips: Vec<_> = track.clips.iter().collect();
+            clips.sort_unstable_by_key(|c| c.timeline_start);
+            let mut previous_end = 0;
+            for clip in clips {
+                let end = clip.timeline_start.checked_add(clip.duration);
                 if !ids.insert(clip.id)
-                    || !track.fits(clip.timeline_start, clip.duration, Some(clip.id))
+                    || clip.duration == 0
+                    || clip.timeline_start < previous_end
+                    || end.is_none_or(|end| end > MAX_FRAME)
                     || clip
                         .source_offset
                         .checked_add(clip.duration)
@@ -466,9 +481,10 @@ impl Project {
                 {
                     return Err("collision-or-invalid-clip".into());
                 }
+                previous_end = clip.end();
                 clip.effects.validate(clip.duration)?;
                 if let Some(asset_id) = clip.source.asset_id() {
-                    let asset = self.asset(asset_id)?;
+                    let asset = assets.get(&asset_id).ok_or("missing-asset")?;
                     if asset.kind != MediaKind::Image
                         && clip.source_offset + clip.duration
                             > self.frame_rate.frames(asset.duration_seconds)

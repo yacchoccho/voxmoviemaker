@@ -1,6 +1,6 @@
 use crate::{Result, assets::Storage, project::*};
 use serde::Serialize;
-use std::{ffi::OsString, path::PathBuf};
+use std::{collections::HashMap, ffi::OsString, path::PathBuf};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RenderClip {
@@ -37,6 +37,7 @@ impl RenderPlan {
     pub fn new(project: &Project, storage: &Storage) -> Result<Self> {
         project.validate()?;
         let mut clips = Vec::new();
+        let assets: HashMap<_, _> = project.assets.iter().map(|a| (a.id, a)).collect();
         for track in &project.tracks {
             if !track.enabled {
                 continue;
@@ -45,7 +46,12 @@ impl RenderPlan {
                 let asset = clip
                     .source
                     .asset_id()
-                    .map(|id| project.asset(id))
+                    .map(|id| {
+                        assets
+                            .get(&id)
+                            .copied()
+                            .ok_or_else(|| "missing-asset".to_string())
+                    })
                     .transpose()?;
                 let text = match &clip.source {
                     ClipSource::Text { settings } => Some(settings.clone()),
@@ -327,12 +333,23 @@ impl RenderPlan {
                 filters.push(format!("{}amix=inputs={}:duration=longest:normalize=0,apad,atrim=duration={total}[aout]", audios.join(""), audios.len()));
             }
         }
-        args.extend([
-            OsString::from("-filter_complex"),
-            filters.join(";").into(),
-            "-map".into(),
-            "[vout]".into(),
-        ]);
+        let graph = filters.join(";");
+        let graph_file = if graph.len() >= 64 * 1024 {
+            let file = super::filter_graph::FilterGraphFile::create(
+                &graph,
+                &self.scratch,
+                &self.data_root,
+            )?;
+            args.extend([
+                OsString::from("-filter_complex_script"),
+                file.path.as_os_str().to_owned(),
+            ]);
+            Some(file)
+        } else {
+            args.extend([OsString::from("-filter_complex"), graph.into()]);
+            None
+        };
+        args.extend([OsString::from("-map"), "[vout]".into()]);
         if preview.is_none() {
             args.extend([OsString::from("-map"), "[aout]".into()]);
         }
@@ -342,6 +359,7 @@ impl RenderPlan {
             width,
             height,
             _text_files: text_files,
+            _graph_file: graph_file,
         })
     }
 }
@@ -350,4 +368,5 @@ pub struct Compiled {
     pub width: u32,
     pub height: u32,
     _text_files: Vec<super::text::TextImage>,
+    _graph_file: Option<super::filter_graph::FilterGraphFile>,
 }

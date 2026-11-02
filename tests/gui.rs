@@ -1894,3 +1894,172 @@ fn preview_drag_waits_for_async_frame_without_losing_the_release_position() {
     f.app.history.undo(&mut f.app.project);
     assert_eq!(f.app.project.clip(id).unwrap().effects.x, 0.0);
 }
+
+#[test]
+fn save_confirmation_resumes_close_and_open_but_not_after_failure() {
+    let mut f = Fixture::new();
+    f.prepare_transport();
+    let path = f.root.join("pending.vmm.json");
+    f.app.save_project(path.clone());
+    f.app.project.tracks[0].name = "changed".into();
+    f.app.confirm_close = true;
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "save");
+    assert!(!f.app.dirty());
+    assert!(f.app.allow_close);
+    assert!(!f.app.confirm_close);
+    assert_eq!(
+        voxmoviemaker::project::persistence::load(&path).unwrap(),
+        f.app.project
+    );
+
+    f.app.allow_close = false;
+    f.app.project.tracks[0].name = "open next".into();
+    f.app.request_path(PathMode::Open);
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "save");
+    assert!(f.app.confirm_discard.is_none());
+    assert_eq!(f.app.path_dialog.as_ref().unwrap().mode, PathMode::Open);
+    f.app.path_dialog = None;
+
+    let blocked = f.root.join("directory.vmm.json");
+    fs::create_dir(&blocked).unwrap();
+    f.app.project_path = Some(blocked);
+    f.app.project.tracks[0].name = "keep this on error".into();
+    let before = f.app.project.clone();
+    f.app.confirm_close = true;
+    f.frame(vec![]);
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "save");
+    assert!(f.app.confirm_close && !f.app.allow_close);
+    assert!(f.app.dirty());
+    assert_eq!(f.app.project, before);
+}
+
+#[test]
+fn rejected_settings_draft_is_not_persisted_at_shutdown() {
+    let mut f = Fixture::new();
+    f.app.show_settings = true;
+    let original = f.app.storage.data.clone();
+    f.app.settings_data_path = Some(f.app.storage.cache.to_string_lossy().into_owned());
+    let frame = |f: &mut Fixture, events: Vec<Event>| {
+        f.ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1600.0, 2000.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ctx| f.app.show(ctx),
+        )
+    };
+    frame(&mut f, vec![]);
+    let output = frame(&mut f, vec![]);
+    let title = f.app.tr("settings");
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &title))
+        .unwrap();
+    frame(
+        &mut f,
+        vec![Event::PointerMoved(pos + egui::vec2(200.0, 100.0))],
+    );
+    let mut output = frame(&mut f, vec![]);
+    for _ in 0..8 {
+        output = frame(
+            &mut f,
+            vec![Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -500.0),
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+    }
+    let label = f.app.tr("apply-save");
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &label))
+        .unwrap();
+    for event in [
+        Event::PointerMoved(pos),
+        Fixture::button(pos, true),
+        Fixture::button(pos, false),
+    ] {
+        frame(&mut f, vec![event]);
+    }
+    assert_eq!(f.app.storage.data, original);
+    assert!(f.app.settings.data_override.is_none());
+    f.app.persist_settings();
+    let (loaded, warning) = Settings::load(&f.app.storage);
+    assert!(warning.is_none());
+    assert!(loaded.data_override.is_none());
+}
+
+#[test]
+fn property_drag_groups_updates_without_erasing_earlier_undo() {
+    let mut f = Fixture::new();
+    let id = f.image_clip(0);
+    let before = f.app.project.clone();
+    f.app.edit(|p| {
+        p.tracks[1].name = "earlier operation".into();
+        Ok(())
+    });
+    let baseline = f.app.project.clone();
+    f.ctx.begin_pass(egui::RawInput {
+        events: vec![Fixture::button(egui::pos2(300.0, 300.0), true)],
+        ..Default::default()
+    });
+    let ctx = f.ctx.clone();
+    for n in 1..=100 {
+        f.app.edit_property(&ctx, id, |p| {
+            p.clip_mut(id).unwrap().effects.x = n as f64;
+            Ok(())
+        });
+    }
+    let _ = f.ctx.end_pass();
+    assert!(f.app.history.is_grouping());
+    f.ctx.begin_pass(egui::RawInput {
+        events: vec![Fixture::button(egui::pos2(300.0, 300.0), false)],
+        ..Default::default()
+    });
+    f.app.finish_idle_property_edit(&ctx);
+    let _ = f.ctx.end_pass();
+    assert!(!f.app.history.is_grouping());
+    assert_eq!(f.app.history.undo_len(), 2);
+    let after = f.app.project.clone();
+    f.app.history.undo(&mut f.app.project);
+    assert_eq!(f.app.project, baseline);
+    f.app.history.undo(&mut f.app.project);
+    assert_eq!(f.app.project, before);
+    f.app.history.redo(&mut f.app.project);
+    f.app.history.redo(&mut f.app.project);
+    assert_eq!(f.app.project, after);
+}
+
+#[test]
+fn first_save_confirmation_can_choose_destination_and_then_close() {
+    use voxmoviemaker::ui::file_picker::FilePicker;
+    let mut f = Fixture::new();
+    f.prepare_transport();
+    f.app.confirm_close = true;
+    let target = f.root.join("first-save.vmm.json");
+    f.app.file_picker = Some(FilePicker::built_in_save(
+        PathMode::Save,
+        f.app.project.project_uuid,
+        target.clone(),
+    ));
+    f.app.save_current();
+    let output = f.wait_for_browser_file("image.png");
+    f.click_menu(&output, "select-export-path");
+    let output = f.frame(vec![]);
+    f.click_menu(&output, "ok");
+    assert!(target.is_file());
+    assert!(f.app.allow_close && !f.app.confirm_close);
+    assert!(!f.app.dirty());
+}

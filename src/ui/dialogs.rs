@@ -1,6 +1,5 @@
 use crate::{
     app::{App, PathDialog, PathMode},
-    assets::{ensure_outside_git, resolved_path},
     project::{commands::History, persistence},
     settings::ExportFormat,
 };
@@ -198,6 +197,7 @@ impl App {
                 match dialog.mode {
                     PathMode::Open => {
                         if let Some(project) = self.report(persistence::load(&path)) {
+                            self.finish_property_edit();
                             self.cancel_preview_transform();
                             self.stop_audio();
                             self.file_picker = None;
@@ -235,7 +235,16 @@ impl App {
                 self.file_picker = None;
             }
         }
-        if self.confirm_discard.is_some() || self.confirm_new || self.confirm_close {
+        if (self.confirm_discard.is_some() || self.confirm_new || self.confirm_close)
+            && !self
+                .path_dialog
+                .as_ref()
+                .is_some_and(|d| d.mode == PathMode::Save)
+            && !self
+                .file_picker
+                .as_ref()
+                .is_some_and(|p| p.mode == PathMode::Save)
+        {
             egui::Window::new(self.tr("discard-title"))
                 .collapsible(false)
                 .resizable(false)
@@ -260,11 +269,13 @@ impl App {
                                     selected_path: None,
                                 });
                             }
+                            self.resume_after_save = false;
                             self.confirm_discard = None;
                             self.confirm_new = false;
                             self.confirm_close = false;
                         }
                         if ui.button(self.tr("cancel")).clicked() {
+                            self.resume_after_save = false;
                             self.confirm_discard = None;
                             self.confirm_new = false;
                             self.confirm_close = false;
@@ -300,6 +311,14 @@ impl App {
         let mut open = true;
         let mut save = false;
         let old = self.settings.clone();
+        let mut data_path = self.settings_data_path.clone().unwrap_or_else(|| {
+            self.settings
+                .data_override
+                .as_ref()
+                .unwrap_or(&self.storage.data)
+                .to_string_lossy()
+                .into_owned()
+        });
         egui::Window::new(self.tr("settings"))
             .open(&mut open)
             .default_width(540.0)
@@ -352,16 +371,7 @@ impl App {
                         egui::Slider::new(&mut self.settings.cache_limit_mb, 8..=4096).text(cache),
                     );
                     ui.label(self.tr("voice-storage"));
-                    let mut path = self
-                        .settings
-                        .data_override
-                        .as_ref()
-                        .unwrap_or(&self.storage.data)
-                        .to_string_lossy()
-                        .into_owned();
-                    if ui.text_edit_singleline(&mut path).changed() {
-                        self.settings.data_override = Some(path.into());
-                    }
+                    ui.text_edit_singleline(&mut data_path);
                     ui.small(self.tr("storage-change-warning"));
                     ui.label(format!(
                         "{}: {}",
@@ -374,6 +384,7 @@ impl App {
                 });
             });
         self.show_settings = open;
+        self.settings_data_path = open.then(|| data_path.clone());
         if old.ffmpeg != self.settings.ffmpeg || old.ffprobe != self.settings.ffprobe {
             self.pause_timeline();
             self.tools = None;
@@ -392,20 +403,15 @@ impl App {
             self.preview_dirty = true;
         }
         if save {
-            if let Some(path) = self.settings.data_override.clone() {
-                let result = ensure_outside_git(&path).and_then(|()| {
-                    let path = resolved_path(&path)?;
-                    let cache = resolved_path(&self.storage.cache)?;
-                    if path.starts_with(&cache) || cache.starts_with(&path) {
-                        return Err("data-cache-overlap".into());
-                    }
-                    Ok(())
-                });
-                if self.report(result).is_none() {
-                    return;
-                }
-                self.storage.data = path;
+            let path = PathBuf::from(data_path);
+            if self
+                .report(self.storage.validate_data_root(&path))
+                .is_none()
+            {
+                return;
             }
+            self.storage.data = path.clone();
+            self.settings.data_override = Some(path);
             self.persist_settings();
             self.preview_dirty = true;
         }

@@ -352,6 +352,8 @@ impl App {
             self.confirm_new = false;
             self.new_project();
         }
+        self.finish_idle_property_edit(ctx);
+        self.resume_saved_action(ctx);
         self.present_timeline(ctx);
     }
 }
@@ -468,6 +470,31 @@ impl App {
             self.project_path = Some(path);
             self.saved = self.project.clone();
             self.status = self.tr("saved");
+            self.resume_after_save =
+                self.confirm_close || self.confirm_new || self.confirm_discard.is_some();
+        }
+    }
+    fn resume_saved_action(&mut self, ctx: &egui::Context) {
+        if !self.resume_after_save
+            || self.dirty()
+            || self.generating
+            || self.importing
+            || self.export.is_some()
+            || self.package.is_some()
+        {
+            return;
+        }
+        self.resume_after_save = false;
+        if self.confirm_close {
+            self.confirm_close = false;
+            self.persist_settings();
+            self.allow_close = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if self.confirm_new {
+            self.confirm_new = false;
+            self.new_project();
+        } else if let Some(mode) = self.confirm_discard.take() {
+            self.request_path(mode);
         }
     }
     pub fn split_selected(&mut self) {

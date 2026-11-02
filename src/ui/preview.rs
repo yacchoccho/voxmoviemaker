@@ -124,6 +124,7 @@ impl App {
             .is_some_and(|index| !self.project.tracks[index].locked)
     }
     pub fn finish_preview_transform(&mut self) {
+        self.finish_property_edit();
         self.preview.pick = None;
         let Some(drag) = self.preview.drag.take() else {
             return;

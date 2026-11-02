@@ -1,5 +1,5 @@
 use super::{
-    ffmpeg::{Capabilities, drain, is_cancelled},
+    ffmpeg::{Capabilities, OwnedProcess, ProcessReader, drain, is_cancelled},
     render_plan::RenderPlan,
 };
 use crate::{Result, settings::ExportFormat};
@@ -92,14 +92,18 @@ pub fn export(
         }
         command.args(["-f", muxer, "-y"]).arg(&temporary);
         super::ffmpeg::protect_child(&mut command);
-        let mut child = command
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut child = OwnedProcess::new(
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| e.to_string())?,
+        );
         let stdout = child.stdout.take().ok_or("process-pipe")?;
         let stderr = child.stderr.take().ok_or("process-pipe")?;
+        let stdout = ProcessReader::new(stdout, cancel.clone()).map_err(|e| e.to_string())?;
+        let stderr = ProcessReader::new(stderr, cancel.clone()).map_err(|e| e.to_string())?;
         let (tx, rx) = mpsc::sync_channel(16);
         let reader = thread::spawn(move || {
             for line in BufReader::new(stdout)
@@ -126,19 +130,21 @@ pub fn export(
             }
             if is_cancelled(&cancel) || started.elapsed() > Duration::from_secs(24 * 3600) {
                 aborted = true;
-                let _ = child.kill();
+                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                child.terminate();
                 break child.wait();
             }
             match child.try_wait() {
                 Ok(Some(status)) => break Ok(status),
                 Ok(None) => thread::sleep(Duration::from_millis(50)),
                 Err(e) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                    child.terminate();
                     break Err(e);
                 }
             }
         };
+        child.terminate();
         let _ = reader.join();
         let stderr = errors.join().map_err(|_| "process-reader")?;
         if aborted {

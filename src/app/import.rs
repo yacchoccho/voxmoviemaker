@@ -66,6 +66,7 @@ impl App {
             return;
         };
         let first_id = first.id;
+        self.finish_preview_transform();
         let result = self.history.edit(&mut self.project, move |p| {
             // Reserve the entire batch so multiple files remain sequential on one layer.
             let destination = commands::placement_track(p, target, start, cursor - start)?;

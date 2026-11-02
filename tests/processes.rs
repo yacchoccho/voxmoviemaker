@@ -203,3 +203,57 @@ fn waveform_uses_a_fixed_envelope_and_rejects_nan() {
             .all(|(rms, peak)| rms <= peak)
     );
 }
+
+#[test]
+fn wrapper_descendants_cannot_hold_pipes_after_timeout_or_cancellation() {
+    for cancel in [false, true] {
+        let start = Instant::now();
+        let result = ffmpeg::run(
+            Command::new("/bin/sh").args(["-c", "sleep 10 & wait"]),
+            Duration::from_millis(80),
+            || cancel,
+        );
+        assert_eq!(
+            result.err().unwrap(),
+            if cancel {
+                "cancelled"
+            } else {
+                "process-timeout"
+            }
+        );
+        assert!(start.elapsed() < Duration::from_secs(2));
+    }
+    let start = Instant::now();
+    let result = ffmpeg::run(
+        Command::new("/bin/sh").args(["-c", "sleep 10 & exit 0"]),
+        Duration::from_secs(2),
+        || false,
+    );
+    assert!(result.is_ok());
+    assert!(start.elapsed() < Duration::from_secs(2));
+}
+#[test]
+fn cancelling_wrapped_export_stops_inherited_progress_pipes() {
+    let f = Fixture::new("sleep 10 & wait");
+    let cancel = Arc::new(AtomicBool::new(false));
+    let flag = cancel.clone();
+    let thread = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(80));
+        flag.store(true, Ordering::Relaxed);
+    });
+    let start = Instant::now();
+    let result = export(
+        &f.plan,
+        &f.binary,
+        &f.caps,
+        ExportFormat::Mp4,
+        &f.target,
+        cancel,
+        |_| {},
+    );
+    thread.join().unwrap();
+    assert_eq!(result.unwrap_err(), "cancelled");
+    assert!(start.elapsed() < Duration::from_secs(2));
+    assert_eq!(f.leftovers(), 0);
+    assert!(!f.target.exists());
+}

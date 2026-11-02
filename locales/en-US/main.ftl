@@ -245,3 +245,4 @@ select-export-path = Use this destination
 no-export-path = Choose an output destination
 choose-project-path = Choose project save location
 save-location = Save location
+non-utf8-path = The file or folder name is not valid UTF-8. Rename it and select it again.

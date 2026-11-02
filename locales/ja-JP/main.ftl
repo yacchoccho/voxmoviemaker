@@ -245,3 +245,4 @@ select-export-path = 保存先にする
 no-export-path = 保存先を選んでください
 choose-project-path = プロジェクトの保存先を選択
 save-location = 保存先
+non-utf8-path = ファイルやフォルダーの名前にUTF-8で扱えない文字が含まれています。名前を変更してから選び直してください。

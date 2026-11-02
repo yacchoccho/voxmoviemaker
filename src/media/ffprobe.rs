@@ -9,6 +9,7 @@ fn number(value: Option<&Value>) -> Option<f64> {
         .filter(|v| v.is_finite())
 }
 pub fn parse(bytes: &[u8], path: &Path) -> Result<MediaAsset> {
+    crate::assets::require_utf8_path(path)?;
     let json: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
     let streams = json["streams"].as_array().ok_or("invalid-media")?;
     let video = streams
@@ -85,7 +86,9 @@ pub fn parse(bytes: &[u8], path: &Path) -> Result<MediaAsset> {
     })
 }
 pub fn probe(binary: &Path, path: &Path) -> Result<MediaAsset> {
+    crate::assets::require_utf8_path(path)?;
     let path = path.canonicalize().map_err(|e| e.to_string())?;
+    crate::assets::require_utf8_path(&path)?;
     if !path.is_file() {
         return Err("invalid-media".into());
     }

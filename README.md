@@ -12,6 +12,7 @@ VoxMovieMakerは、VOICEVOXの音声生成に対応したLinux向け動画編集
 - クリップの移動・分割・トリミング、コピー＆ペースト、Undo / Redo
 - VOICEVOXによる音声生成と字幕の自動配置。音声と字幕を一つのクリップとして編集
 - 字幕・タイトルの追加、プレビュー上での移動・拡大縮小
+- PSD立ち絵と、同じキャラクターのVOICEVOX音声に合わせた口パク・自動目パチ
 - 音量・不透明度・フェード・トランジションの調整
 - 音声付きプレビュー、MP4 / WebMへの書き出し
 - 日本語・英語・簡体字中国語、Dark・Light・Systemテーマ
@@ -47,7 +48,7 @@ sudo apt install ffmpeg
 
 ### 2. ビルドして起動
 
-Rust Stable 1.88以上とLinuxの開発用ツール・リンカーを用意し、`Cargo.toml` のあるディレクトリで実行します。
+Rust Stable 1.97以上とLinuxの開発用ツール・リンカーを用意し、`Cargo.toml` のあるディレクトリで実行します。
 
 ```bash
 cargo build --locked --release --bin voxmoviemaker
@@ -102,6 +103,14 @@ cargo build --locked --release --bin voxmoviemaker
 
 字幕・テキストのフォントは、右側の「フォント」から名前で検索して選べます。↑↓で候補を移動し、Enterで選択、Escapeで閉じます。フォント一覧にはOSにインストール済みのフォントを表示し、従来のフォントファイル指定も利用できます。
 
+### PSD立ち絵を使う
+
+タイムラインの「立ち絵クリップ設定」で立ち絵を登録し、PSDファイルとキャラクターを選びます。レイヤーの初期表示、口・目それぞれの通常時レイヤーとアニメーションのコマを設定し、「再生ヘッド位置へ立ち絵を配置」を押します。コマは追加・削除・並べ替えができ、複数レイヤーを選択できます。
+
+同じキャラクターの有効なVOICEVOX音声と重なる間だけ口パクし、音声がない間も立ち絵の表示と目パチは続きます。位置・大きさ・表示時間は、ほかのクリップと同じ方法で変更します。設定画面下のフレーム位置と「発話中として確認」でアニメーションを確認できます。
+
+立ち絵設定は全プロジェクト共通です。プロジェクトには設定IDと配置情報だけを保存し、アセット付き書き出しにも立ち絵設定・PSDを含めません。別PCでは `sprites.json` とPSDを別途移し、PSDの保存場所を選び直してください。RGB 8bit・通常合成の画像レイヤーを対象とし、マスクや特殊効果などの制限は[立ち絵の実装・制限](docs/SPRITES.md)を参照してください。
+
 ### 保存・書き出し
 
 | 目的 | 操作 |
@@ -150,6 +159,8 @@ cargo build --locked --release --bin voxmoviemaker
 | 連続再生用プロキシ | `~/.cache/voxmoviemaker/proxies/` |
 | 設定 | `~/.config/voxmoviemaker/settings.json` |
 | キャラクター共通設定 | `~/.config/voxmoviemaker/characters.json` |
+| 立ち絵共通設定 | `~/.config/voxmoviemaker/sprites.json` |
+| 立ち絵の描画用一時画像 | `~/.cache/voxmoviemaker/text/vmm-sprite-*/`（処理後に削除） |
 
 **生成音声は永続保存され、キャッシュの整理では削除されません。** 試聴で生成した音声も保存します。
 
@@ -159,6 +170,9 @@ XDG環境変数を絶対パスで設定している場合は、次の場所を�
 - キャッシュ：`$XDG_CACHE_HOME/voxmoviemaker/`
 - 設定：`$XDG_CONFIG_HOME/voxmoviemaker/settings.json`
 - キャラクター：`$XDG_CONFIG_HOME/voxmoviemaker/characters.json`
+- 立ち絵：`$XDG_CONFIG_HOME/voxmoviemaker/sprites.json`
+
+PSDの元ファイルは選択した場所から読み取り専用で参照します。PSDを自動コピーしたり、書き換えたりはしません。デコード済みレイヤーは上限付きのメモリキャッシュで再利用し、描画用一時画像は上記キャッシュ配下で作成します。
 
 音声の保存先は「設定」でも変更できます。既存音声は自動移動しません。Git管理下への音声保存や、音声とキャッシュが重なる保存先は使用できません。
 

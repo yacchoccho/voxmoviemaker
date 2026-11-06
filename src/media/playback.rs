@@ -67,6 +67,9 @@ pub fn prepare(
     request.width.hash(&mut hash);
     request.ffmpeg.hash(&mut hash);
     for clip in &request.plan.clips {
+        if clip.sprite.is_some() {
+            crate::sprites::RENDER_CACHE_VERSION.hash(&mut hash);
+        }
         if clip.visual
             && let Some(text) = &clip.text
         {
@@ -102,7 +105,9 @@ pub fn prepare(
         return Ok(proxy);
     }
     // Make room before writing. Only owned .nut files are disposable; WAV assets are elsewhere.
-    let compiled = request.plan.compile_proxy(request.width)?;
+    let compiled = request
+        .plan
+        .compile_cancellable(None, Some(request.width), cancelled)?;
     prune(&directory, 0, Path::new(""));
     let temporary = directory.join(format!("vmm-proxy-{}.part", uuid::Uuid::new_v4()));
     fs::OpenOptions::new()

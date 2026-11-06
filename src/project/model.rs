@@ -7,7 +7,7 @@ use std::{
 use uuid::Uuid;
 
 pub type Id = Uuid;
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 pub const MAX_FRAME: u64 = 100_000_000;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -161,6 +161,9 @@ impl VoicevoxSettings {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ClipSource {
+    Sprite {
+        settings_id: Id,
+    },
     Text {
         settings: TextSettings,
     },
@@ -181,7 +184,7 @@ impl ClipSource {
     pub fn asset_id(&self) -> Option<Id> {
         match self {
             Self::Media { asset_id } | Self::Voicevox { asset_id, .. } => Some(*asset_id),
-            Self::Text { .. } => None,
+            Self::Text { .. } | Self::Sprite { .. } => None,
         }
     }
 }
@@ -526,7 +529,10 @@ impl Project {
                 previous_end = clip.end();
                 clip.effects.validate(clip.duration)?;
                 if let Some(binding) = &clip.character {
-                    if matches!(clip.source, ClipSource::Media { .. }) {
+                    if matches!(
+                        clip.source,
+                        ClipSource::Media { .. } | ClipSource::Sprite { .. }
+                    ) {
                         return Err("invalid-character".into());
                     }
                     binding.validate()?;
@@ -541,6 +547,9 @@ impl Project {
                     }
                 }
                 match &clip.source {
+                    ClipSource::Sprite { settings_id } if settings_id.is_nil() => {
+                        return Err("sprite-missing".into());
+                    }
                     ClipSource::Text { settings } => settings.validate()?,
                     ClipSource::Voicevox {
                         subtitle: Some(settings),

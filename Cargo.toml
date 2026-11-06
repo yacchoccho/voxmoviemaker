@@ -2,7 +2,7 @@
 name = "voxmoviemaker"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.97"
 license = "MIT"
 description = "A lightweight Linux timeline editor using external FFmpeg and VOICEVOX"
 publish = false
@@ -22,6 +22,8 @@ hound = "3.5"
 libc = "0.2"
 # Already present in the audited egui dependency graph; system-font text rasterization.
 ab_glyph = "=0.2.32"
+# Read-only PSD integration; test generators and optional serde support are unnecessary.
+apeireth-image-psd = { version = "=2.0.0-rc.5", default-features = false }
 
 [profile.release]
 lto = "thin"

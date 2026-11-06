@@ -34,6 +34,7 @@ impl App {
                                 }
                             }
                             PathMode::Relink(id) => self.relink(id, path),
+                            PathMode::SpritePsd(id) => self.set_sprite_psd(id, path),
                             PathMode::Export | PathMode::Save => {
                                 if let Some(dialog) =
                                     self.path_dialog.as_mut().filter(|d| d.mode == picker.mode)
@@ -83,6 +84,7 @@ impl App {
                 PathMode::Export => "export",
                 PathMode::Package => "export-package",
                 PathMode::Relink(_) => "relink",
+                PathMode::SpritePsd(_) => "sprite-choose-psd",
             });
             let mut open = true;
             let mut execute = false;
@@ -198,6 +200,7 @@ impl App {
                     PathMode::Open => {
                         if let Some(project) = self.report(persistence::load(&path)) {
                             self.reload_characters();
+                            self.reload_sprites();
                             self.finish_property_edit();
                             self.cancel_preview_transform();
                             self.stop_audio();
@@ -210,6 +213,7 @@ impl App {
                             self.track = 0;
                             self.playhead = 0;
                             self.changed();
+                            self.warn_missing_sprites();
                         }
                     }
                     PathMode::Save => {
@@ -224,6 +228,7 @@ impl App {
                     PathMode::Export => self.start_export(path, ctx),
                     PathMode::Package => self.start_package(path, ctx),
                     PathMode::Relink(id) => self.relink(id, path),
+                    PathMode::SpritePsd(id) => self.set_sprite_psd(id, path),
                 }
             } else if open {
                 self.path_dialog = Some(dialog);

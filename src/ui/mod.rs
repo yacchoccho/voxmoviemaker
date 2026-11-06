@@ -4,6 +4,7 @@ pub mod file_picker;
 pub mod preview;
 mod properties;
 pub mod searchable_combo_box;
+pub mod sprites;
 pub mod timeline;
 mod voice_input;
 use crate::{
@@ -141,6 +142,10 @@ impl App {
                     }
                     if ui.button(self.tr("paste")).clicked() {
                         self.paste();
+                        ui.close();
+                    }
+                    if ui.button(self.tr("sprite-settings")).clicked() {
+                        self.sprite_ui.open = true;
                         ui.close();
                     }
                     if ui.button(self.tr("add-subtitle")).clicked() {
@@ -350,6 +355,7 @@ impl App {
             self.preview_interaction(ui, rect);
         });
         self.character_window(ctx);
+        self.sprite_window(ctx);
         self.dialogs(ctx);
         if self.confirm_new && (!self.dirty() && !self.generating && !self.importing) {
             self.confirm_new = false;
@@ -365,9 +371,16 @@ fn fit_aspect(available: egui::Vec2, size: egui::Vec2) -> egui::Vec2 {
 }
 impl App {
     pub fn request_path(&mut self, mode: PathMode) {
-        if matches!(mode, PathMode::Import | PathMode::Relink(_)) {
+        if matches!(
+            mode,
+            PathMode::Import | PathMode::Relink(_) | PathMode::SpritePsd(_)
+        ) {
             if self.file_picker.is_none() {
-                let title = self.tr("choose-media");
+                let title = self.tr(if matches!(mode, PathMode::SpritePsd(_)) {
+                    "sprite-choose-psd"
+                } else {
+                    "choose-media"
+                });
                 self.file_picker = Some(file_picker::FilePicker::new(
                     mode,
                     self.project.project_uuid,
@@ -455,14 +468,21 @@ impl App {
             return;
         }
         let target = path.canonicalize().unwrap_or_else(|_| path.clone());
-        if self.project.assets.iter().any(|a| {
-            self.storage
-                .resolve(self.project.project_uuid, a)
-                .canonicalize()
-                .ok()
-                .as_ref()
-                == Some(&target)
-        }) {
+        if self
+            .sprites
+            .library
+            .sprites
+            .iter()
+            .any(|s| s.psd.canonicalize().ok().as_ref() == Some(&target))
+            || self.project.assets.iter().any(|a| {
+                self.storage
+                    .resolve(self.project.project_uuid, a)
+                    .canonicalize()
+                    .ok()
+                    .as_ref()
+                    == Some(&target)
+            })
+        {
             self.status = self.tr("source-protected");
             return;
         }

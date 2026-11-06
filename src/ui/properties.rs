@@ -44,6 +44,9 @@ impl App {
                     }
                 }
                 self.clip_character_properties(ui, &mut clip);
+                if let ClipSource::Sprite { settings_id } = &mut clip.source {
+                    self.sprite_clip_properties(ui, settings_id);
+                }
                 egui::Grid::new("clip-values")
                     .num_columns(2)
                     .spacing([8.0, 8.0])
@@ -121,6 +124,7 @@ impl App {
                 let visual = matches!(
                     clip.source,
                     ClipSource::Text { .. }
+                        | ClipSource::Sprite { .. }
                         | ClipSource::Voicevox {
                             subtitle: Some(_),
                             ..
@@ -281,6 +285,9 @@ impl App {
             ui.small(self.tr("fps-frames-warning"));
             ui.separator();
             ui.small(self.tr("character-project-hint"));
+            if ui.button(self.tr("sprite-settings")).clicked() {
+                self.sprite_ui.open = true;
+            }
             if ui.button(self.tr("characters")).clicked() {
                 self.character_ui.open = true;
             }

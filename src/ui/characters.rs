@@ -344,7 +344,10 @@ impl App {
         self.character_ui = state;
     }
     pub(super) fn clip_character_properties(&mut self, ui: &mut egui::Ui, clip: &mut Clip) {
-        if matches!(clip.source, ClipSource::Media { .. }) {
+        if matches!(
+            clip.source,
+            ClipSource::Media { .. } | ClipSource::Sprite { .. }
+        ) {
             return;
         }
         ui.strong(self.tr("character"));

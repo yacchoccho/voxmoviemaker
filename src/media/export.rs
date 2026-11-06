@@ -51,7 +51,7 @@ pub fn export(
         .open(&temporary)
         .map_err(|e| e.to_string())?;
     let result = (|| {
-        let compiled = plan.compile(None)?;
+        let compiled = plan.compile_cancellable(None, None, &|| is_cancelled(&cancel))?;
         let mut command = Command::new(binary);
         command.args(compiled.args).args([
             "-c:v",

@@ -67,7 +67,12 @@ pub fn objects(plan: &RenderPlan, frame: u64, width: u32) -> Result<Vec<PreviewO
                 bounds[3] as f64 * plan.height as f64 / image.height() as f64,
             ]
         } else {
-            let [sw, sh] = clip.source_size;
+            let [sw, sh] = if let Some(sprite) = &clip.sprite {
+                let doc = crate::sprites::psd::load(&sprite.settings.psd)?;
+                [doc.width, doc.height]
+            } else {
+                clip.source_size
+            };
             if sw == 0 || sh == 0 {
                 continue;
             }

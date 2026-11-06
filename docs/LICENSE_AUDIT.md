@@ -93,3 +93,17 @@ FFmpeg/ffprobeはユーザーが導入した外部プログラムです。検証
 素材の追加・再リンク時に、OSに導入済みの `zenity --file-selection` を独立した外部プロセスとして呼び出します。シェルは介さず、引数と標準出力でファイル名を受け渡します。Zenity・GTKの実行ファイル、共有ライブラリ、ソース、画像をリンク・コピー・同梱・自動導入しません。Zenityがない場合は独自のRust/eguiフォルダーブラウザーを使うため、実行時の必須依存ではありません。追加のCargo依存・許可ライセンスはありません。
 
 [上流COPYING](https://github.com/GNOME/zenity/blob/master/COPYING)と、導入済み `/usr/share/doc/zenity/copyright` を確認しました。パッケージの記録ではソースヘッダーがLGPL-2以降、COPYING/READMEがLGPL-2.1以降で、差異は上流課題として記載されています。いずれもアプリへ組み込むクレートではなく、ユーザーのOS側で配布・管理される別プログラムとして扱います。将来の配布物にZenityやGTKを取り込む根拠にはせず、同梱する場合は改めて配布条件を監査する必要があります。
+
+## PSD立ち絵（2026-11-06追加）
+
+`apeireth-image-psd = 2.0.0-rc.5` を版固定・default features無効で採用しました。公開クレートの正規化Cargo.tomlは `Apache-2.0 OR MIT` を宣言し、Cargo.toml.origと各ソースは `Copyright (c) 2026 ArtCraft Team and the PhotoCraft contributors`、`MIT OR Apache-2.0` を保持しています。VMMではMITを選びます。親プロジェクトのライセンスのみを根拠にしていません。
+
+crateアーカイブにはLICENSE全文がありませんでした。`.cargo_vcs_info.json` のコミット `16d0a680b9d25edf918e1ac36614d0c2efdf45bb` の `crates/engine/image/NOTICE.md` が `psd/` を明示してMIT OR Apache-2.0の適用範囲を定めることと、同階層の `LICENSE-MIT` の権利者・許諾文・免責を確認しました。MIT/Apache全文とNOTICEを変更せず `LICENSES/apeireth-image-psd-2.0.0-rc.5/upstream/` へ収録し、URL・コミット・SHA-256を `UPSTREAM_LICENSES.json` に記録しています。公開時メタデータは `dirty: true` なので、クレート内容がそのコミットと完全一致するという主張はしていません。実クレートのライセンス宣言・ソース表示と、PSDを含む範囲についての上流原文をそれぞれ確認しました。
+
+MIT側の条件に従い、元の著作権表示と許諾全文を維持します。NOTICE中の他の画像クレート・フォント・ブランド・顔検出等の説明は原文保存のための上位集合で、それらをVMMへ取り込んだことを意味しません。PSDの実装や親プロジェクトからソース・画像・フォントをコピーせず、指定されたクレートだけをCargo経由で使用します。
+
+通常依存は既に監査済みの `flate2` と `thiserror` です。`flate2` はdefault features無効の `rust_backend`、`thiserror` は2系で、解決済みの `miniz_oxide`・`adler2`・`simd-adler32`・`crc32fast`・proc-macro系も許可ライセンス内です。PSDクレート自身の `proptest` は同クレートの開発用依存で、VMMのビルドグラフには入りません。`serde`・`testgen`・`corpus` のオプションfeatureは無効、build scriptなし、追加のFFI・ネイティブライブラリ・バンドルアセットなしです。クレートは `unsafe_code = forbid` を使用しています。
+
+実ビルド対象は176クレートです。`cargo-deny check licenses` は許可リストを増やさず成功し、`license-notices` は原文欠落0件で第三者一覧を生成しました。元PSDや立ち絵画像の権利はユーザーが各配布元の規約を確認する必要があり、VMMのMITライセンスの対象にはしません。テストPSDはRustで生成した単色の独自データのみです。FFmpeg・VOICEVOXの非同梱方針は維持しています。
+
+このクレートの公開版rc.4/rc.5はいずれもRust 1.97を要求します。アプリのrust-versionとREADMEの最低要件を1.97へ更新し、実検証は既存環境のRust 1.99.1で行いました。1.97そのもの、任意の実PSD、配布パッケージの最終監査は未実施です。

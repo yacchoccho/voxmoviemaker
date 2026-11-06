@@ -58,6 +58,7 @@ pub enum ClipDecoration {
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PathMode {
+    SpritePsd(Id),
     Open,
     Save,
     Import,
@@ -84,6 +85,8 @@ pub struct DragClip {
     pub track: usize,
 }
 pub struct App {
+    pub sprites: crate::sprites::SpriteStore,
+    pub sprite_ui: crate::ui::sprites::SpriteUi,
     pub characters: crate::characters::CharacterStore,
     pub character_ui: crate::ui::characters::CharacterUi,
     pub project: Project,
@@ -168,8 +171,13 @@ impl App {
         i18n.language = settings.language.clone();
         let project = Project::default();
         let characters = crate::characters::CharacterStore::load(&storage.config);
-        let warning = warning.or_else(|| characters.error.clone());
+        let sprites = crate::sprites::SpriteStore::load(&storage.config);
+        let warning = warning
+            .or_else(|| characters.error.clone())
+            .or_else(|| sprites.error.clone());
         let app = Self {
+            sprites,
+            sprite_ui: Default::default(),
             characters,
             character_ui: Default::default(),
             saved: project.clone(),
@@ -697,10 +705,11 @@ impl App {
             self.status = self.tr("ffmpeg-missing");
             return;
         };
-        let Some(plan) = self.report(RenderPlan::with_characters(
+        let Some(plan) = self.report(RenderPlan::with_libraries(
             &self.project,
             &self.storage,
             &self.characters.library,
+            &self.sprites.library,
         )) else {
             return;
         };
@@ -855,10 +864,11 @@ impl App {
                 self.texture = None;
             }
             if self.tools.is_some()
-                && let Some(plan) = self.report(RenderPlan::with_characters(
+                && let Some(plan) = self.report(RenderPlan::with_libraries(
                     &self.project,
                     &self.storage,
                     &self.characters.library,
+                    &self.sprites.library,
                 ))
             {
                 self.preview.pending = true;
@@ -912,6 +922,7 @@ impl App {
     }
     pub fn new_project(&mut self) {
         self.reload_characters();
+        self.reload_sprites();
         self.finish_property_edit();
         self.resume_after_save = false;
         self.cancel_preview_transform();

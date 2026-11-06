@@ -20,6 +20,376 @@ struct Fixture {
     app: App,
     ctx: egui::Context,
 }
+
+fn sprite_psd(f: &Fixture) -> PathBuf {
+    use apeireth_image_psd::{LayerSpec, PixelData, PsdBuilder};
+    let path = f.root.join("sprite.psd");
+    let mut builder = PsdBuilder::new(4, 4);
+    builder.push_layer(LayerSpec::new(
+        "Body",
+        0,
+        0,
+        4,
+        4,
+        PixelData::Rgba8([255, 0, 0, 255].repeat(16)),
+    ));
+    fs::write(&path, builder.to_bytes().unwrap()).unwrap();
+    path
+}
+
+#[test]
+fn sprite_manager_file_browser_and_independent_timeline_clip_are_connected() {
+    use voxmoviemaker::ui::file_picker::FilePicker;
+    let mut f = Fixture::new();
+    let path = sprite_psd(&f);
+    let characters = f.app.characters.library.clone();
+    f.app.sprite_ui.open = true;
+    f.frame(vec![]);
+    let out = f.frame(vec![]);
+    f.click_menu(&out, "sprite-new");
+    let id = f.app.sprite_ui.selected.unwrap();
+    assert_eq!(f.app.sprites.library.sprites.len(), 1);
+    let mut picker = FilePicker::built_in(
+        PathMode::SpritePsd(id),
+        f.app.project.project_uuid,
+        f.app.project.tracks[0].id,
+        0,
+    );
+    picker.browse(f.root.clone(), &f.ctx);
+    f.app.file_picker = Some(picker);
+    let out = f.wait_for_browser_file("sprite.psd");
+    let pos = out
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "sprite.psd"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let out = f.frame(vec![]);
+    if f.app.file_picker.is_some() {
+        let key = f.app.tr("select-file");
+        assert!(
+            out.shapes
+                .iter()
+                .any(|s| text_position(&s.shape, &key).is_some()),
+            "picker still open; texts={:?}",
+            out.shapes
+                .iter()
+                .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape {
+                    Some(t.galley.text())
+                } else {
+                    None
+                })
+                .collect::<Vec<_>>()
+        );
+        f.click_menu(&out, "select-file");
+    }
+    assert_eq!(f.app.sprites.library.get(id).unwrap().psd, path);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while f.app.project.tracks.iter().all(|t| t.clips.is_empty()) {
+        let out = f.frame(vec![]);
+        f.click_menu(&out, "sprite-insert");
+        assert!(
+            Instant::now() < deadline,
+            "sprite insertion timed out: {:?}",
+            f.app.sprite_ui.error
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+    let clip = f.app.project.clip(f.app.selected.unwrap()).unwrap();
+    assert_eq!(clip.source, ClipSource::Sprite { settings_id: id });
+    assert!(clip.character.is_none());
+    assert_eq!(f.app.characters.library, characters);
+    assert_eq!(
+        voxmoviemaker::sprites::SpriteStore::load(&f.app.storage.config).library,
+        f.app.sprites.library
+    );
+    f.app.history.undo(&mut f.app.project);
+    assert!(f.app.project.tracks.iter().all(|t| t.clips.is_empty()));
+}
+
+#[test]
+fn sprite_animation_editor_supports_more_than_three_frames_and_reordering() {
+    use voxmoviemaker::sprites::{Sprite, SpriteLibrary};
+    let mut f = Fixture::new();
+    let mut sprite = Sprite::new("Sprite".into());
+    sprite.psd = sprite_psd(&f);
+    for (i, step) in sprite.mouth.frames.iter_mut().enumerate() {
+        step.duration_ms = 100 + i as u32 * 100;
+    }
+    let id = sprite.id;
+    f.app
+        .save_sprites(SpriteLibrary {
+            schema_version: 1,
+            sprites: vec![sprite],
+        })
+        .unwrap();
+    f.app.sprite_ui.open = true;
+    f.app.sprite_ui.selected = Some(id);
+    f.frame(vec![]);
+    let out = f.frame(vec![]);
+    f.click_menu(&out, "sprite-mouth");
+    let out = f.frame(vec![]);
+    f.click_menu(&out, "sprite-add-frame");
+    let out = f.frame(vec![]);
+    f.click_menu(&out, "sprite-add-frame");
+    assert_eq!(f.app.sprites.library.get(id).unwrap().mouth.frames.len(), 5);
+    let out = f.frame(vec![]);
+    let pos = out
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, "↓"))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    assert_eq!(
+        f.app.sprites.library.get(id).unwrap().mouth.frames[0].duration_ms,
+        200
+    );
+    assert_eq!(
+        f.app.sprites.library.get(id).unwrap().mouth.frames[1].duration_ms,
+        100
+    );
+}
+
+#[test]
+fn sprite_layer_dropdown_shows_cached_previews_without_changing_selection() {
+    use voxmoviemaker::sprites::{Sprite, SpriteLibrary};
+    let mut f = Fixture::new();
+    let mut sprite = Sprite::new("Sprite".into());
+    sprite.psd = sprite_psd(&f);
+    let id = sprite.id;
+    f.app
+        .save_sprites(SpriteLibrary {
+            schema_version: 1,
+            sprites: vec![sprite],
+        })
+        .unwrap();
+    f.app.sprite_ui.open = true;
+    f.app.sprite_ui.selected = Some(id);
+    f.frame(vec![]);
+    let out = f.frame(vec![]);
+    f.click_menu(&out, "sprite-mouth");
+    let before = f.app.sprites.library.clone();
+    let out = f.frame(vec![]);
+    let label = format!("{} (0)", f.app.tr("sprite-select-layers"));
+    let pos = out
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &label))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let texture = loop {
+        let out = f.frame(vec![]);
+        if let Some(texture) = f
+            .ctx
+            .tex_manager()
+            .read()
+            .allocated()
+            .find_map(|(id, meta)| meta.name.starts_with("sprite-layer-").then_some(*id))
+        {
+            assert!(
+                out.shapes
+                    .iter()
+                    .any(|s| text_position(&s.shape, "Body [0]").is_some())
+            );
+            break texture;
+        }
+        assert!(Instant::now() < deadline, "layer thumbnail timed out");
+        thread::sleep(Duration::from_millis(5));
+    };
+    assert_eq!(
+        f.app.sprites.library, before,
+        "opening or loading previews must not select a layer"
+    );
+    // Clicking a thumbnail is equivalent to clicking its layer checkbox.
+    let out = f.frame(vec![]);
+    let pos = out
+        .shapes
+        .iter()
+        .find_map(|s| match &s.shape {
+            egui::epaint::Shape::Rect(rect)
+                if rect
+                    .brush
+                    .as_ref()
+                    .is_some_and(|brush| brush.fill_texture_id == texture) =>
+            {
+                Some(rect.rect.center())
+            }
+            egui::epaint::Shape::Mesh(mesh) if mesh.texture_id == texture => {
+                Some(mesh.calc_bounds().center())
+            }
+            _ => None,
+        })
+        .expect("thumbnail must be painted in the popup");
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    assert_eq!(
+        f.app
+            .sprites
+            .library
+            .get(id)
+            .unwrap()
+            .mouth
+            .idle_layers
+            .len(),
+        1
+    );
+    // Close and reopen: the same GPU texture is reused.
+    f.frame(vec![Event::Key {
+        key: egui::Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    }]);
+    let out = f.frame(vec![]);
+    let label = format!("{} (1)", f.app.tr("sprite-select-layers"));
+    let pos = out
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &label))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    assert!(
+        f.ctx
+            .tex_manager()
+            .read()
+            .allocated()
+            .any(|(id, meta)| *id == texture && meta.name.starts_with("sprite-layer-"))
+    );
+    // A replacement PSD can reuse the same layer IDs, but must get fresh images.
+    f.frame(vec![Event::Key {
+        key: egui::Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    }]);
+    let replacement = f.root.join("replacement.psd");
+    let mut builder = apeireth_image_psd::PsdBuilder::new(4, 4);
+    builder.push_layer(apeireth_image_psd::LayerSpec::new(
+        "Body",
+        0,
+        0,
+        4,
+        4,
+        apeireth_image_psd::PixelData::Rgba8([0, 0, 255, 255].repeat(16)),
+    ));
+    fs::write(&replacement, builder.to_bytes().unwrap()).unwrap();
+    f.app.set_sprite_psd(id, replacement);
+    f.frame(vec![]);
+    assert!(
+        !f.ctx
+            .tex_manager()
+            .read()
+            .allocated()
+            .any(|(id, _)| *id == texture)
+    );
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !f
+        .ctx
+        .tex_manager()
+        .read()
+        .allocated()
+        .any(|(_, meta)| meta.name == "sprite-settings-preview")
+    {
+        f.frame(vec![]);
+        assert!(
+            Instant::now() < deadline,
+            "replacement PSD loading timed out: {:?}",
+            f.app.sprite_ui.error
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+    // Asynchronous image loading changes the window size; let its position settle.
+    f.frame(vec![]);
+    let out = f.frame(vec![]);
+    let label = format!("{} (0)", f.app.tr("sprite-select-layers"));
+    let pos = out
+        .shapes
+        .iter()
+        .find_map(|s| text_position(&s.shape, &label))
+        .unwrap();
+    f.frame(vec![Event::PointerMoved(pos)]);
+    f.frame(vec![Fixture::button(pos, true)]);
+    f.frame(vec![Fixture::button(pos, false)]);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        f.frame(vec![]);
+        if let Some(new) = f
+            .ctx
+            .tex_manager()
+            .read()
+            .allocated()
+            .find_map(|(id, meta)| meta.name.starts_with("sprite-layer-").then_some(*id))
+        {
+            assert_ne!(new, texture);
+            break;
+        }
+        assert!(Instant::now() < deadline, "replacement thumbnail timed out");
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn sprite_name_supports_ime_confirmation_and_empty_drafts_without_losing_focus() {
+    use voxmoviemaker::sprites::{Sprite, SpriteLibrary};
+    let mut f = Fixture::new();
+    let sprite = Sprite::new("Original".into());
+    let id = sprite.id;
+    f.app
+        .save_sprites(SpriteLibrary {
+            schema_version: 1,
+            sprites: vec![sprite],
+        })
+        .unwrap();
+    f.app.sprite_ui.open = true;
+    f.app.sprite_ui.selected = Some(id);
+    f.frame(vec![]);
+    f.frame(vec![]);
+    let editor = egui::Id::new(("sprite-name", id));
+    f.ctx.memory_mut(|m| m.request_focus(editor));
+    f.frame(vec![]);
+    select_all_text(&mut f);
+    f.frame(vec![
+        Event::Ime(egui::ImeEvent::Enabled),
+        Event::Ime(egui::ImeEvent::Preedit("あおい".into())),
+    ]);
+    assert_eq!(f.app.sprites.library.get(id).unwrap().name, "Original");
+    f.frame(vec![
+        Event::Ime(egui::ImeEvent::Commit("葵".into())),
+        Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        },
+    ]);
+    assert_eq!(f.app.sprites.library.get(id).unwrap().name, "葵");
+    assert_eq!(f.ctx.memory(|m| m.focused()), Some(editor));
+    select_all_text(&mut f);
+    f.frame(vec![Event::Key {
+        key: egui::Key::Backspace,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    }]);
+    f.frame(vec![]);
+    assert_eq!(f.ctx.memory(|m| m.focused()), Some(editor));
+    assert!(f.app.sprite_ui.draft.as_ref().unwrap().name.is_empty());
+    assert_eq!(f.app.sprites.library.get(id).unwrap().name, "葵");
+}
 impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!("vmm-gui-{}", Id::new_v4()));

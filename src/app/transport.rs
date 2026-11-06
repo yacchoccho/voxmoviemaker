@@ -107,10 +107,11 @@ impl App {
             self.status = self.tr("empty-project");
             return;
         }
-        let Some(plan) = self.report(RenderPlan::with_characters(
+        let Some(plan) = self.report(RenderPlan::with_libraries(
             &self.project,
             &self.storage,
             &self.characters.library,
+            &self.sprites.library,
         )) else {
             return;
         };

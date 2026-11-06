@@ -160,6 +160,7 @@ impl FilePicker {
     pub fn show(&mut self, ctx: &egui::Context, i18n: &I18n) -> Option<Result<Option<PathBuf>>> {
         let saving = matches!(self.mode, PathMode::Save | PathMode::Export);
         let title = match self.mode {
+            PathMode::SpritePsd(_) => "sprite-choose-psd",
             PathMode::Save => "choose-project-path",
             PathMode::Export => "choose-export-path",
             _ => "choose-media",

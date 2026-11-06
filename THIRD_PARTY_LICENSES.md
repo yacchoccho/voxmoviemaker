@@ -12,6 +12,7 @@ No bundled fonts, icons, FFmpeg or VOICEVOX. The application reads installed sys
 | ab_glyph_rasterizer | 0.1.10 | Apache-2.0 | [LICENSE](LICENSES/ab_glyph_rasterizer-0.1.10/LICENSE) |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | [LICENSE-0BSD](LICENSES/adler2-2.0.1/LICENSE-0BSD), [LICENSE-APACHE](LICENSES/adler2-2.0.1/LICENSE-APACHE), [LICENSE-MIT](LICENSES/adler2-2.0.1/LICENSE-MIT) |
 | ahash | 0.8.12 | MIT OR Apache-2.0 | [LICENSE-APACHE](LICENSES/ahash-0.8.12/LICENSE-APACHE), [LICENSE-MIT](LICENSES/ahash-0.8.12/LICENSE-MIT) |
+| apeireth-image-psd | 2.0.0-rc.5 | Apache-2.0 OR MIT | [upstream/NOTICE.md](LICENSES/apeireth-image-psd-2.0.0-rc.5/upstream/NOTICE.md), [upstream/LICENSE-APACHE](LICENSES/apeireth-image-psd-2.0.0-rc.5/upstream/LICENSE-APACHE), [upstream/LICENSE-MIT](LICENSES/apeireth-image-psd-2.0.0-rc.5/upstream/LICENSE-MIT) |
 | arboard | 3.7.0 | MIT OR Apache-2.0 | [LICENSE-APACHE.txt](LICENSES/arboard-3.7.0/LICENSE-APACHE.txt), [LICENSE-MIT.txt](LICENSES/arboard-3.7.0/LICENSE-MIT.txt) |
 | as-raw-xcb-connection | 1.0.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](LICENSES/as-raw-xcb-connection-1.0.1/LICENSE-APACHE), [LICENSE-MIT](LICENSES/as-raw-xcb-connection-1.0.1/LICENSE-MIT) |
 | autocfg | 1.5.1 | Apache-2.0 OR MIT | [LICENSE-APACHE](LICENSES/autocfg-1.5.1/LICENSE-APACHE), [LICENSE-MIT](LICENSES/autocfg-1.5.1/LICENSE-MIT) |

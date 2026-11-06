@@ -28,6 +28,9 @@ pub fn preview(
     frame.hash(&mut hash);
     width.hash(&mut hash);
     for clip in &plan.clips {
+        if clip.sprite.is_some() {
+            crate::sprites::RENDER_CACHE_VERSION.hash(&mut hash);
+        }
         if clip.visual
             && let Some(text) = &clip.text
         {
@@ -55,7 +58,7 @@ pub fn preview(
     {
         return Ok(img);
     }
-    let compiled = plan.compile(Some((frame, width)))?;
+    let compiled = plan.compile_cancellable(Some((frame, width)), None, &cancelled)?;
     let output = run(
         Command::new(ffmpeg).args(compiled.args).args([
             "-frames:v",

@@ -24,6 +24,9 @@
 /.config/voxmoviemaker/
 
 # 音声・動画の誤追加防止（大文字の拡張子にも対応）
+# ユーザーが用意した立ち絵の元データは含めない
+*.[pP][sS][dD]
+*.[pP][sS][bB]
 *.[wW][aA][vV]
 *.[mM][pP]4
 *.[wW][eE][bB][mM]

@@ -174,5 +174,29 @@
     "url": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-APACHE",
     "path": "LICENSES/profiling-1.0.18/upstream/LICENSE-APACHE",
     "sha256": "10d30a673cd5e9349bdc02aeb48f14b3386d27d0da32df8f0a555d4aa16aa551"
+  },
+  {
+    "crate": "apeireth-image-psd",
+    "version": "2.0.0-rc.5",
+    "commit": "16d0a680b9d25edf918e1ac36614d0c2efdf45bb",
+    "url": "https://raw.githubusercontent.com/Apeireth/Apeireth/16d0a680b9d25edf918e1ac36614d0c2efdf45bb/crates/engine/image/LICENSE-MIT",
+    "path": "LICENSES/apeireth-image-psd-2.0.0-rc.5/upstream/LICENSE-MIT",
+    "sha256": "1a8f66d8a86b146f5336fa0d4b1186576c8aa98e60823080c85c7811cfd810af"
+  },
+  {
+    "crate": "apeireth-image-psd",
+    "version": "2.0.0-rc.5",
+    "commit": "16d0a680b9d25edf918e1ac36614d0c2efdf45bb",
+    "url": "https://raw.githubusercontent.com/Apeireth/Apeireth/16d0a680b9d25edf918e1ac36614d0c2efdf45bb/crates/engine/image/LICENSE-APACHE",
+    "path": "LICENSES/apeireth-image-psd-2.0.0-rc.5/upstream/LICENSE-APACHE",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "crate": "apeireth-image-psd",
+    "version": "2.0.0-rc.5",
+    "commit": "16d0a680b9d25edf918e1ac36614d0c2efdf45bb",
+    "url": "https://raw.githubusercontent.com/Apeireth/Apeireth/16d0a680b9d25edf918e1ac36614d0c2efdf45bb/crates/engine/image/NOTICE.md",
+    "path": "LICENSES/apeireth-image-psd-2.0.0-rc.5/upstream/NOTICE.md",
+    "sha256": "ab10da0d056c778ef675e032864aee535c3cb80a08e7ba337cbc1577fbb640e8"
   }
 ]

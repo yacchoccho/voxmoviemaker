@@ -41,6 +41,9 @@ impl App {
             if ui.button(self.tr("add-subtitle")).clicked() {
                 self.insert_text(true, false);
             }
+            if ui.button(self.tr("sprite-settings")).clicked() {
+                self.sprite_ui.open = true;
+            }
             if ui.button(self.tr("add-text")).clicked() {
                 self.insert_text(false, false);
             }
@@ -225,7 +228,9 @@ impl App {
                             .and_then(|id| self.project.asset(id).ok());
                         let kind = asset.map(|a| a.kind).unwrap_or(MediaKind::Audio);
                         let voice = matches!(clip.source, ClipSource::Voicevox { .. });
-                        let color = if matches!(clip.source, ClipSource::Text { .. }) {
+                        let color = if matches!(clip.source, ClipSource::Sprite { .. }) {
+                            egui::Color32::from_rgb(50, 125, 105)
+                        } else if matches!(clip.source, ClipSource::Text { .. }) {
                             egui::Color32::from_rgb(137, 80, 64)
                         } else if voice {
                             egui::Color32::from_rgb(117, 80, 150)
@@ -246,6 +251,15 @@ impl App {
                             );
                         }
                         let title = match &clip.source {
+                            ClipSource::Sprite { settings_id } => format!(
+                                "{} · {}",
+                                self.tr("sprite"),
+                                self.sprites
+                                    .library
+                                    .get(*settings_id)
+                                    .map(|s| s.name.clone())
+                                    .unwrap_or_else(|| self.tr("sprite-missing"))
+                            ),
                             ClipSource::Voicevox { text, subtitle, .. } => format!(
                                 "{} · {text}",
                                 self.tr(

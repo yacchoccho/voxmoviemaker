@@ -4,6 +4,7 @@ use std::{collections::HashMap, ffi::OsString, path::PathBuf};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RenderClip {
+    pub sprite: Option<crate::sprites::SpriteRender>,
     pub id: Id,
     pub path: PathBuf,
     pub kind: MediaKind,
@@ -43,8 +44,18 @@ impl RenderPlan {
         storage: &Storage,
         characters: &crate::characters::CharacterLibrary,
     ) -> Result<Self> {
+        let sprites = crate::sprites::SpriteStore::load(&storage.config);
+        Self::with_libraries(project, storage, characters, &sprites.library)
+    }
+    pub fn with_libraries(
+        project: &Project,
+        storage: &Storage,
+        characters: &crate::characters::CharacterLibrary,
+        sprites: &crate::sprites::SpriteLibrary,
+    ) -> Result<Self> {
         project.validate()?;
         let mut clips = Vec::new();
+        let mut speech = HashMap::new();
         let assets: HashMap<_, _> = project.assets.iter().map(|a| (a.id, a)).collect();
         for track in &project.tracks {
             if !track.enabled {
@@ -61,6 +72,24 @@ impl RenderPlan {
                             .ok_or_else(|| "missing-asset".to_string())
                     })
                     .transpose()?;
+                let sprite = if let ClipSource::Sprite { settings_id } = &clip.source {
+                    let settings = sprites
+                        .get(*settings_id)
+                        .ok_or_else(|| format!("sprite-missing: {settings_id}"))?
+                        .clone();
+                    Some(crate::sprites::SpriteRender {
+                        source_revision: crate::sprites::psd::revision(&settings.psd),
+                        speech: speech
+                            .entry(settings.character_id)
+                            .or_insert_with(|| {
+                                crate::sprites::speech_spans(project, settings.character_id)
+                            })
+                            .clone(),
+                        settings,
+                    })
+                } else {
+                    None
+                };
                 let text = match &clip.source {
                     ClipSource::Text { settings } => Some(clip.character.as_ref().map_or_else(
                         || settings.clone(),
@@ -70,9 +99,15 @@ impl RenderPlan {
                 };
                 clips.push(RenderClip {
                     id: clip.id,
+                    sprite: sprite.clone(),
                     path: asset
                         .map(|a| storage.resolve(project.project_uuid, a))
-                        .unwrap_or_default(),
+                        .unwrap_or_else(|| {
+                            sprite
+                                .as_ref()
+                                .map(|s| s.settings.psd.clone())
+                                .unwrap_or_default()
+                        }),
                     kind: asset.map_or(MediaKind::Image, |a| a.kind),
                     source_size: asset.map_or([project.width, project.height], |a| {
                         if a.rotation.rem_euclid(180) == 90 {
@@ -108,6 +143,7 @@ impl RenderPlan {
                 if let Some(style) = subtitle {
                     clips.push(RenderClip {
                         id: clip.id,
+                        sprite: None,
                         path: PathBuf::new(),
                         kind: MediaKind::Image,
                         source_size: [project.width, project.height],
@@ -146,11 +182,19 @@ impl RenderPlan {
     /// Preview and export use this same compiler and the same back-to-front clip order.
     /// All interpolated filter values are validated numbers; paths are separate argv entries.
     pub fn compile(&self, preview: Option<(u64, u32)>) -> Result<Compiled> {
-        self.compile_mode(preview, None)
+        self.compile_mode(preview, None, &|| false)
     }
     /// Full timeline with the exact export composition/mix, at bounded preview resolution.
     pub fn compile_proxy(&self, width: u32) -> Result<Compiled> {
-        self.compile_mode(None, Some(width))
+        self.compile_mode(None, Some(width), &|| false)
+    }
+    pub fn compile_cancellable(
+        &self,
+        preview: Option<(u64, u32)>,
+        proxy: Option<u32>,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Compiled> {
+        self.compile_mode(preview, proxy, cancelled)
     }
     pub fn preview_size(&self, width: u32) -> (u32, u32) {
         let mut w = width.clamp(160, 1280) / 2 * 2;
@@ -161,7 +205,12 @@ impl RenderPlan {
         }
         ((w / 2 * 2).max(2), (h / 2 * 2).max(2))
     }
-    fn compile_mode(&self, preview: Option<(u64, u32)>, proxy: Option<u32>) -> Result<Compiled> {
+    fn compile_mode(
+        &self,
+        preview: Option<(u64, u32)>,
+        proxy: Option<u32>,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Compiled> {
         let (width, height) = if let Some(w) = preview.map(|(_, w)| w).or(proxy) {
             self.preview_size(w)
         } else {
@@ -194,7 +243,11 @@ impl RenderPlan {
         let mut audios = Vec::new();
         let mut input = 0;
         let mut text_files = Vec::new();
+        let mut sprite_files = Vec::new();
         for clip in &self.clips {
+            if cancelled() {
+                return Err("cancelled".into());
+            }
             let mut start = clip.start;
             let mut offset = clip.offset;
             let mut duration = clip.duration;
@@ -210,7 +263,33 @@ impl RenderPlan {
             if !clip.visual && !audio {
                 continue;
             }
-            let path = if let Some(text) = &clip.text {
+            let mut animated_sprite = false;
+            let path = if let Some(sprite) = &clip.sprite {
+                let doc = crate::sprites::psd::load(&sprite.settings.psd)?;
+                let fit = (width as f64 / doc.width as f64).min(height as f64 / doc.height as f64);
+                let size = [
+                    (doc.width as f64 * fit).round().max(1.0) as u32,
+                    (doc.height as f64 * fit).round().max(1.0) as u32,
+                ];
+                let file = crate::sprites::render::prepare(
+                    crate::sprites::render::SpriteInput {
+                        sprite,
+                        fps: self.fps,
+                        start: clip.start,
+                        offset: clip.offset,
+                        duration: clip.duration,
+                        preview: preview.map(|(f, _)| f),
+                        size,
+                        scratch: &self.scratch,
+                        data: &self.data_root,
+                    },
+                    cancelled,
+                )?;
+                animated_sprite = file.animated;
+                let path = file.input.clone();
+                sprite_files.push(file);
+                path
+            } else if let Some(text) = &clip.text {
                 let file = super::text::temporary_image(
                     text,
                     width,
@@ -234,7 +313,14 @@ impl RenderPlan {
                 "-threads".into(),
                 "1".into(),
             ]);
-            if clip.kind == MediaKind::Image {
+            if animated_sprite {
+                args.extend([
+                    OsString::from("-f"),
+                    "concat".into(),
+                    "-safe".into(),
+                    "0".into(),
+                ]);
+            } else if clip.kind == MediaKind::Image {
                 args.extend([
                     OsString::from("-loop"),
                     "1".into(),
@@ -288,7 +374,12 @@ impl RenderPlan {
                         }
                     }
                 }
-                filters.push(format!("[{input}:{video_stream}]trim=duration={duration_time},setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,scale={sw}:{sh},setsar=1,{effect},setpts=PTS+{start_time}/TB[v{input}]"));
+                let sequence_fps = if animated_sprite {
+                    format!("fps={},", self.fps.ffmpeg())
+                } else {
+                    String::new()
+                };
+                filters.push(format!("[{input}:{video_stream}]trim=duration={duration_time},setpts=PTS-STARTPTS,{sequence_fps}scale={width}:{height}:force_original_aspect_ratio=decrease,format=rgba,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,scale={sw}:{sh},setsar=1,{effect},setpts=PTS+{start_time}/TB[v{input}]"));
                 let x = clip.effects.x * width as f64 / self.width as f64;
                 let y = clip.effects.y * height as f64 / self.height as f64;
                 let slide = if clip.effects.transition == TransitionKind::SlideLeft
@@ -377,6 +468,7 @@ impl RenderPlan {
             width,
             height,
             _text_files: text_files,
+            _sprite_files: sprite_files,
             _graph_file: graph_file,
         })
     }
@@ -386,5 +478,6 @@ pub struct Compiled {
     pub width: u32,
     pub height: u32,
     _text_files: Vec<super::text::TextImage>,
+    _sprite_files: Vec<crate::sprites::render::SpriteFiles>,
     _graph_file: Option<super::filter_graph::FilterGraphFile>,
 }

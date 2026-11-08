@@ -103,6 +103,7 @@ impl App {
             sprite.psd = path;
             sprite.visibility.clear();
             sprite.mouth = Animation::default();
+            sprite.mouth_detection = Default::default();
             sprite.blink = Animation::default();
         }
         // Parse and validate asynchronously in the settings preview worker.
@@ -427,19 +428,23 @@ impl App {
                                 }
                                 1 | 2 => {
                                     let mouth = state.tab == 1;
-                                    let animation = if mouth {
-                                        &mut draft.mouth
+                                    if mouth {
+                                        mouth_editor(
+                                            ui,
+                                            draft,
+                                            state.document.as_ref(),
+                                            &self.i18n,
+                                            &mut state.thumbnails,
+                                        );
                                     } else {
-                                        &mut draft.blink
-                                    };
-                                    animation_editor(
-                                        ui,
-                                        animation,
-                                        state.document.as_ref(),
-                                        &self.i18n,
-                                        mouth,
-                                        &mut state.thumbnails,
-                                    );
+                                        animation_editor(
+                                            ui,
+                                            &mut draft.blink,
+                                            state.document.as_ref(),
+                                            &self.i18n,
+                                            &mut state.thumbnails,
+                                        );
+                                    }
                                     if !mouth {
                                         ui.horizontal(|ui| {
                                             ui.label(self.tr("sprite-blink-interval"));
@@ -555,6 +560,7 @@ impl App {
                             let image = (|| {
                                 doc.validate_settings(&request.sprite)?;
                                 let render = SpriteRender {
+                                    voices: Vec::new(),
                                     source_revision: None,
                                     settings: request.sprite,
                                     speech: if request.speaking {
@@ -694,7 +700,6 @@ fn animation_editor(
     animation: &mut Animation,
     doc: Option<&Arc<Document>>,
     i18n: &crate::i18n::I18n,
-    mouth: bool,
     thumbnails: &mut thumbnails::LayerThumbnails,
 ) {
     ui.checkbox(&mut animation.enabled, i18n.text("enabled"));
@@ -714,9 +719,6 @@ fn animation_editor(
         .changed()
     {
         animation.speed_milli = (speed * 1000.0).round() as u32;
-    }
-    if mouth {
-        ui.checkbox(&mut animation.repeat, i18n.text("sprite-repeat"));
     }
     let mut action = None;
     let len = animation.frames.len();
@@ -771,4 +773,53 @@ fn animation_editor(
     {
         animation.frames.push(AnimationFrame::default());
     }
+}
+
+fn mouth_editor(
+    ui: &mut egui::Ui,
+    sprite: &mut Sprite,
+    doc: Option<&Arc<Document>>,
+    i18n: &crate::i18n::I18n,
+    thumbnails: &mut thumbnails::LayerThumbnails,
+) {
+    ui.checkbox(&mut sprite.mouth.enabled, i18n.text("enabled"));
+    ui.label(i18n.text("sprite-mouth-closed"));
+    layer_selector(
+        ui,
+        &mut sprite.mouth.idle_layers,
+        doc,
+        "idle",
+        i18n.text("sprite-select-layers"),
+        thumbnails,
+        i18n,
+    );
+    ui.label(i18n.text("sprite-mouth-open"));
+    let middle = sprite.mouth.frames.len() / 2;
+    if let Some(frame) = sprite.mouth.frames.get_mut(middle) {
+        layer_selector(
+            ui,
+            &mut frame.layers,
+            doc,
+            "open",
+            i18n.text("sprite-select-layers"),
+            thumbnails,
+            i18n,
+        );
+    }
+    ui.add(
+        egui::Slider::new(&mut sprite.mouth_detection.threshold_db, -80.0..=0.0)
+            .text(i18n.text("sprite-mouth-threshold"))
+            .suffix(" dBFS"),
+    );
+    ui.add(
+        egui::Slider::new(&mut sprite.mouth_detection.attack_ms, 0..=2000)
+            .text(i18n.text("sprite-mouth-attack"))
+            .suffix(" ms"),
+    );
+    ui.add(
+        egui::Slider::new(&mut sprite.mouth_detection.release_ms, 0..=2000)
+            .text(i18n.text("sprite-mouth-release"))
+            .suffix(" ms"),
+    );
+    ui.small(i18n.text("sprite-mouth-help"));
 }

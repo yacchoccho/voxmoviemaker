@@ -161,6 +161,30 @@ fn scene(f: &Fixture) -> (Project, SpriteLibrary, CharacterLibrary) {
     binding.subtitle_enabled = false;
     voice.character = Some(Box::new(binding));
     p.tracks[0].clips.push(voice);
+    let wav = f.storage.resolve(p.project_uuid, &a);
+    fs::create_dir_all(wav.parent().unwrap()).unwrap();
+    let mut writer = hound::WavWriter::create(
+        &wav,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 48000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for i in 0..96000 {
+        writer
+            .write_sample::<i16>(if (9600..19200).contains(&i) {
+                0
+            } else if i % 2 == 0 {
+                8000
+            } else {
+                -8000
+            })
+            .unwrap();
+    }
+    writer.finalize().unwrap();
     p.assets.push(a);
     (
         p,
@@ -197,6 +221,7 @@ fn psd_layers_nested_groups_coordinates_alpha_and_cache() {
     assert!(Arc::ptr_eq(&pixels, &doc.layer_pixels(n.index).unwrap()));
     assert!(Arc::ptr_eq(&doc, &psd::load(&sprite.psd).unwrap()));
     let r = SpriteRender {
+        voices: Vec::new(),
         source_revision: None,
         settings: sprite,
         speech: Vec::new(),
@@ -294,6 +319,7 @@ fn animation_groups_keep_initial_children_and_replace_psdtool_alternatives() {
     s.blink_interval_ms = 100;
     doc.validate_settings(&s).unwrap();
     let mut render = SpriteRender {
+        voices: Vec::new(),
         source_revision: None,
         settings: s,
         speech: Vec::new(),
@@ -329,6 +355,7 @@ fn animation_groups_keep_initial_children_and_replace_psdtool_alternatives() {
 fn unfinished_animation_settings_preserve_base_face_parts() {
     let doc = Document::from_bytes(&fixture_psd()).unwrap();
     let mut render = SpriteRender {
+        voices: Vec::new(),
         settings: Sprite::new("test".into()),
         source_revision: None,
         speech: vec![SpeechSpan {
@@ -342,8 +369,8 @@ fn unfinished_animation_settings_preserve_base_face_parts() {
     };
     let baseline = doc.visibility(&render, 0, 0, fps).unwrap();
     render.settings.mouth.frames = vec![
-        step("id:4", 100),
         step("id:3", 100),
+        step("id:4", 100),
         AnimationFrame::default(),
     ];
     render.settings.blink.frames = vec![
@@ -360,8 +387,8 @@ fn unfinished_animation_settings_preserve_base_face_parts() {
     }
     render.settings.mouth.enabled = true;
     render.settings.blink.enabled = true;
-    // Before speech/blinking, during an unfinished frame, and after speech.
-    for frame in [0, 350, 750] {
+    // Before speech/blinking and after speech.
+    for frame in [0, 750] {
         assert_eq!(
             doc.visibility(&render, frame, frame, fps).unwrap(),
             baseline
@@ -369,7 +396,8 @@ fn unfinished_animation_settings_preserve_base_face_parts() {
     }
     let active = doc.visibility(&render, 150, 150, fps).unwrap();
     assert!(active.contains("id:4") && active.contains("id:6"));
-    // Explicit idle choices are also used by unfinished frames.
+    render.settings.mouth.frames[1].layers.clear();
+    // Explicit idle choices are also used by unfinished poses.
     render.settings.mouth.idle_layers = vec!["id:4".into()];
     render.settings.blink.idle_layers = vec!["id:6".into()];
     let idle = doc.visibility(&render, 350, 350, fps).unwrap();
@@ -496,6 +524,7 @@ fn voice_overlap_character_identity_union_and_idle_mouth_are_independent_of_eyes
     assert_eq!(spans.len(), 1);
     assert_eq!((spans[0].start, spans[0].end), (10, 50));
     let r = SpriteRender {
+        voices: Vec::new(),
         source_revision: None,
         settings: s.clone(),
         speech: spans,
@@ -556,6 +585,7 @@ fn unrelated_body_visibility_is_unchanged_and_overlapping_animation_layers_are_r
     let doc = psd::load(&s.psd).unwrap();
     doc.validate_settings(&s).unwrap();
     let r = SpriteRender {
+        voices: Vec::new(),
         source_revision: None,
         settings: s.clone(),
         speech: vec![SpeechSpan { start: 0, end: 100 }],
@@ -758,8 +788,7 @@ fn real_sprite_preview_proxy_mp4_and_ntsc_export_agree_at_animation_boundaries()
     };
     let f = Fixture::new();
     let (mut p, library, characters) = scene(&f);
-    // Keep voice timing but remove audio I/O: its overlap still drives the mouth.
-    p.assets[0].has_audio = false;
+    // Real synthetic WAV includes an internal silent interval for mouth gating.
     let settings = Settings::default();
     let capabilities = ffmpeg::detect(&settings).unwrap();
     for (iteration, fps) in [
@@ -843,4 +872,80 @@ fn real_sprite_preview_proxy_mp4_and_ntsc_export_agree_at_animation_boundaries()
             }
         }
     }
+}
+
+#[test]
+fn voice_gating_uses_matching_enabled_clips_and_preserves_legacy_settings() {
+    let f = Fixture::new();
+    let (mut p, library, characters) = scene(&f);
+    let sprite = &library.sprites[0];
+    let mut json = serde_json::to_value(sprite).unwrap();
+    json.as_object_mut().unwrap().remove("mouth_detection");
+    let legacy: Sprite = serde_json::from_value(json).unwrap();
+    assert_eq!(legacy.mouth_detection, MouthDetection::default());
+    assert_eq!(legacy.open_mouth(), ["id:4"]);
+    let mut other = p.tracks[0].clips[0].clone();
+    other.id = Id::new_v4();
+    other.character.as_mut().unwrap().character_id = Id::new_v4();
+    p.tracks[2].clips.push(other);
+    let build = |p: &Project| {
+        RenderPlan::with_libraries(p, &f.storage, &characters, &library)
+            .unwrap()
+            .clips
+            .into_iter()
+            .find_map(|c| c.sprite)
+            .unwrap()
+    };
+    assert_eq!(build(&p).voices.len(), 1);
+    p.tracks[0].clips[0].source_offset = 3;
+    p.tracks[0].clips[0].timeline_start = 15;
+    let snapshot = build(&p);
+    assert_eq!(
+        (snapshot.voices[0].offset, snapshot.voices[0].start),
+        (3, 15)
+    );
+    let resolved = speech::resolve(
+        &snapshot,
+        p.frame_rate,
+        &f.storage.cache.join("speech"),
+        &|| false,
+    )
+    .unwrap();
+    assert!(!resolved.speech.is_empty());
+    // Every active frame uses exactly the same open pose, regardless of seek order.
+    for frame in (0..60).rev() {
+        let expected = if resolved
+            .speech
+            .iter()
+            .any(|s| s.start <= frame && frame < s.end)
+        {
+            "id:4"
+        } else {
+            "id:3"
+        };
+        assert!(
+            resolved
+                .selected_layers(frame, frame, p.frame_rate)
+                .0
+                .contains(expected)
+        );
+        let next = frame
+            .saturating_add(resolved.next_change(frame, frame, p.frame_rate))
+            .min(60);
+        let pose = resolved.selected_layers(frame, frame, p.frame_rate);
+        for inside in frame..next {
+            assert_eq!(resolved.selected_layers(inside, inside, p.frame_rate), pose);
+        }
+    }
+    p.tracks[0].clips[0].muted = true;
+    assert!(build(&p).voices.is_empty());
+    p.tracks[0].clips[0].muted = false;
+    p.tracks[0].muted = true;
+    assert!(build(&p).voices.is_empty());
+    p.tracks[0].muted = false;
+    p.tracks[0].enabled = false;
+    assert!(build(&p).voices.is_empty());
+    p.tracks[0].enabled = true;
+    p.tracks[0].clips[0].volume = 0.0;
+    assert!(build(&p).voices.is_empty());
 }

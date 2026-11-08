@@ -66,6 +66,7 @@ fn actual_psd_mouth_and_blink_replace_variants_without_stacking_them() {
     // Configuring frames before choosing an idle pose must not erase the face,
     // even when animations are disabled (the actual reported editing sequence).
     let mut unfinished = SpriteRender {
+        voices: Vec::new(),
         settings: Sprite::new("Unfinished".into()),
         source_revision: None,
         speech: Vec::new(),
@@ -110,10 +111,11 @@ fn actual_psd_mouth_and_blink_replace_variants_without_stacking_them() {
         base
     );
     let render = SpriteRender {
+        voices: Vec::new(),
         settings: settings.clone(),
         source_revision: None,
         speech: vec![SpeechSpan {
-            start: 0,
+            start: 100,
             end: 1000,
         }],
     };
@@ -152,6 +154,7 @@ fn actual_psd_mouth_and_blink_replace_variants_without_stacking_them() {
     settings.blink.frames[0].layers = vec![eyes_open.clone()];
     settings.blink.frames[2].layers = vec![eyes_open.clone()];
     let render = SpriteRender {
+        voices: Vec::new(),
         settings,
         source_revision: None,
         speech: Vec::new(),
@@ -316,7 +319,29 @@ fn actual_psd_animation_preview_and_export_agree() {
         muted: false,
         effects: Default::default(),
     });
-    // Timing-only VOICEVOX source; actual synthesis/output is covered elsewhere.
+    // Synthetic tone/silence WAV; user artwork remains read-only and external.
+    let mut writer = hound::WavWriter::create(
+        root.join("timing-only.wav"),
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 48000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for i in 0..48000 {
+        writer
+            .write_sample::<i16>(if (9600..19200).contains(&i) {
+                0
+            } else if i % 2 == 0 {
+                8000
+            } else {
+                -8000
+            })
+            .unwrap();
+    }
+    writer.finalize().unwrap();
     let asset = MediaAsset {
         id: Id::new_v4(),
         name: "timing".into(),
@@ -325,7 +350,7 @@ fn actual_psd_animation_preview_and_export_agree() {
         duration_seconds: 1.0,
         width: 0,
         height: 0,
-        has_audio: false,
+        has_audio: true,
         sample_rate: None,
         frame_rate: None,
         codec: String::new(),

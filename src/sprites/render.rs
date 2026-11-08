@@ -61,6 +61,8 @@ pub fn prepare(input: SpriteInput<'_>, cancelled: &dyn Fn() -> bool) -> Result<S
     {
         return Err("sprite-psd-changed".into());
     }
+    let resolved = super::speech::resolve(sprite, fps, &scratch.join("speech"), cancelled)?;
+    let sprite = &resolved;
     let doc = psd::load(&sprite.settings.psd)?;
     doc.validate_settings(&sprite.settings)?;
     private_directory(scratch)?;

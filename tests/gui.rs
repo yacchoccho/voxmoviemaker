@@ -110,14 +110,11 @@ fn sprite_manager_file_browser_and_independent_timeline_clip_are_connected() {
 }
 
 #[test]
-fn sprite_animation_editor_supports_more_than_three_frames_and_reordering() {
+fn sprite_mouth_editor_exposes_binary_poses_and_gate_controls() {
     use voxmoviemaker::sprites::{Sprite, SpriteLibrary};
     let mut f = Fixture::new();
     let mut sprite = Sprite::new("Sprite".into());
     sprite.psd = sprite_psd(&f);
-    for (i, step) in sprite.mouth.frames.iter_mut().enumerate() {
-        step.duration_ms = 100 + i as u32 * 100;
-    }
     let id = sprite.id;
     f.app
         .save_sprites(SpriteLibrary {
@@ -131,10 +128,53 @@ fn sprite_animation_editor_supports_more_than_three_frames_and_reordering() {
     let out = f.frame(vec![]);
     f.click_menu(&out, "sprite-mouth");
     let out = f.frame(vec![]);
+    for key in [
+        "sprite-mouth-closed",
+        "sprite-mouth-open",
+        "sprite-mouth-threshold",
+        "sprite-mouth-attack",
+        "sprite-mouth-release",
+    ] {
+        assert!(
+            out.shapes
+                .iter()
+                .any(|s| text_position(&s.shape, &f.app.tr(key)).is_some()),
+            "missing {key}"
+        );
+    }
+    assert!(
+        !out.shapes
+            .iter()
+            .any(|s| text_position(&s.shape, &f.app.tr("sprite-add-frame")).is_some())
+    );
+}
+
+#[test]
+fn sprite_blink_editor_supports_more_than_three_frames_and_reordering() {
+    use voxmoviemaker::sprites::{Sprite, SpriteLibrary};
+    let mut f = Fixture::new();
+    let mut sprite = Sprite::new("Sprite".into());
+    sprite.psd = sprite_psd(&f);
+    for (i, step) in sprite.blink.frames.iter_mut().enumerate() {
+        step.duration_ms = 100 + i as u32 * 100;
+    }
+    let id = sprite.id;
+    f.app
+        .save_sprites(SpriteLibrary {
+            schema_version: 1,
+            sprites: vec![sprite],
+        })
+        .unwrap();
+    f.app.sprite_ui.open = true;
+    f.app.sprite_ui.selected = Some(id);
+    f.frame(vec![]);
+    let out = f.frame(vec![]);
+    f.click_menu(&out, "sprite-blink");
+    let out = f.frame(vec![]);
     f.click_menu(&out, "sprite-add-frame");
     let out = f.frame(vec![]);
     f.click_menu(&out, "sprite-add-frame");
-    assert_eq!(f.app.sprites.library.get(id).unwrap().mouth.frames.len(), 5);
+    assert_eq!(f.app.sprites.library.get(id).unwrap().blink.frames.len(), 5);
     let out = f.frame(vec![]);
     let pos = out
         .shapes
@@ -145,11 +185,11 @@ fn sprite_animation_editor_supports_more_than_three_frames_and_reordering() {
     f.frame(vec![Fixture::button(pos, true)]);
     f.frame(vec![Fixture::button(pos, false)]);
     assert_eq!(
-        f.app.sprites.library.get(id).unwrap().mouth.frames[0].duration_ms,
+        f.app.sprites.library.get(id).unwrap().blink.frames[0].duration_ms,
         200
     );
     assert_eq!(
-        f.app.sprites.library.get(id).unwrap().mouth.frames[1].duration_ms,
+        f.app.sprites.library.get(id).unwrap().blink.frames[1].duration_ms,
         100
     );
 }

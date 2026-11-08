@@ -1,11 +1,12 @@
 //! Shared sprite definitions live in XDG config; projects retain only their UUID.
 pub mod psd;
 pub mod render;
+pub mod speech;
 mod storage;
 pub use storage::SpriteStore;
 
 /// Bump when sprite rendering changes so old previews/proxies are not reused.
-pub(crate) const RENDER_CACHE_VERSION: u32 = 2;
+pub(crate) const RENDER_CACHE_VERSION: u32 = 3;
 
 use crate::{
     Result,
@@ -159,6 +160,23 @@ impl Animation {
         &self.idle_layers
     }
 }
+/// Speech gate settings, shared through XDG sprite definitions.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MouthDetection {
+    pub threshold_db: f32,
+    pub attack_ms: u32,
+    pub release_ms: u32,
+}
+impl Default for MouthDetection {
+    fn default() -> Self {
+        Self {
+            threshold_db: -40.0,
+            attack_ms: 20,
+            release_ms: 80,
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Sprite {
     pub id: Id,
@@ -168,6 +186,8 @@ pub struct Sprite {
     /// Only visibility overrides; missing keys use the original PSD flags.
     pub visibility: BTreeMap<String, bool>,
     pub mouth: Animation,
+    #[serde(default)]
+    pub mouth_detection: MouthDetection,
     pub blink: Animation,
     pub blink_interval_ms: u32,
 }
@@ -180,9 +200,18 @@ impl Sprite {
             character_id: None,
             visibility: BTreeMap::new(),
             mouth: Animation::default(),
+            mouth_detection: MouthDetection::default(),
             blink: Animation::default(),
             blink_interval_ms: 3000,
         }
+    }
+    /// Legacy sequences conventionally place the open pose in the middle.
+    /// Preserve the stored sequence, but hold that pose instead of cycling it.
+    pub fn open_mouth(&self) -> &[String] {
+        self.mouth
+            .frames
+            .get(self.mouth.frames.len() / 2)
+            .map_or(&[], |frame| frame.layers.as_slice())
     }
     pub fn validate(&self) -> Result<()> {
         crate::assets::require_utf8_path(&self.psd)?;
@@ -194,6 +223,13 @@ impl Sprite {
             || self.visibility.len() > 2048
             || self.visibility.keys().any(|k| k.len() > 1024)
             || !(100..=600000).contains(&self.blink_interval_ms)
+        {
+            return Err("sprite-invalid".into());
+        }
+        if !self.mouth_detection.threshold_db.is_finite()
+            || !(-80.0..=0.0).contains(&self.mouth_detection.threshold_db)
+            || self.mouth_detection.attack_ms > 2000
+            || self.mouth_detection.release_ms > 2000
         {
             return Err("sprite-invalid".into());
         }
@@ -275,6 +311,7 @@ pub struct SpriteRender {
     pub source_revision: Option<[u64; 7]>,
     pub settings: Sprite,
     pub speech: Vec<SpeechSpan>,
+    pub voices: Vec<speech::VoiceSource>,
 }
 impl SpriteRender {
     pub fn next_change(&self, local: u64, timeline: u64, fps: FrameRate) -> u64 {
@@ -284,19 +321,13 @@ impl SpriteRender {
             .next_change(local, fps, Some(self.settings.blink_interval_ms))
             .saturating_sub(local);
         if self.settings.mouth.enabled {
-            if let Some(span) = self
-                .speech
-                .iter()
-                .find(|s| s.start <= timeline && timeline < s.end)
-            {
-                delta = delta.min(span.end - timeline).min(
-                    self.settings
-                        .mouth
-                        .next_change(timeline - span.start, fps, None)
-                        .saturating_sub(timeline - span.start),
-                );
-            } else if let Some(span) = self.speech.iter().find(|s| s.start > timeline) {
-                delta = delta.min(span.start - timeline);
+            let index = self.speech.partition_point(|s| s.end <= timeline);
+            if let Some(span) = self.speech.get(index) {
+                delta = delta.min(if span.start <= timeline {
+                    span.end - timeline
+                } else {
+                    span.start - timeline
+                });
             }
         }
         delta.max(1)
@@ -309,14 +340,13 @@ impl SpriteRender {
     ) -> (BTreeSet<String>, BTreeSet<String>) {
         let speech = self
             .speech
-            .iter()
-            .find(|s| s.start <= timeline && timeline < s.end);
-        let mouth = self.settings.mouth.layers_at(
-            speech.map_or(0, |s| timeline - s.start),
-            fps,
-            speech.is_some(),
-            None,
-        );
+            .get(self.speech.partition_point(|s| s.end <= timeline))
+            .filter(|s| s.start <= timeline);
+        let mouth = if self.settings.mouth.enabled && speech.is_some() {
+            self.settings.open_mouth()
+        } else {
+            &self.settings.mouth.idle_layers
+        };
         let eyes =
             self.settings
                 .blink

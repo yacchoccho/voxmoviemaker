@@ -55,7 +55,7 @@ impl RenderPlan {
     ) -> Result<Self> {
         project.validate()?;
         let mut clips = Vec::new();
-        let mut speech = HashMap::new();
+        let mut voices = HashMap::new();
         let assets: HashMap<_, _> = project.assets.iter().map(|a| (a.id, a)).collect();
         for track in &project.tracks {
             if !track.enabled {
@@ -77,14 +77,41 @@ impl RenderPlan {
                         .get(*settings_id)
                         .ok_or_else(|| format!("sprite-missing: {settings_id}"))?
                         .clone();
-                    Some(crate::sprites::SpriteRender {
-                        source_revision: crate::sprites::psd::revision(&settings.psd),
-                        speech: speech
-                            .entry(settings.character_id)
-                            .or_insert_with(|| {
-                                crate::sprites::speech_spans(project, settings.character_id)
+                    let sources = voices.entry(settings.character_id).or_insert_with(|| {
+                        project
+                            .tracks
+                            .iter()
+                            .filter(|t| t.enabled && !t.muted)
+                            .flat_map(|t| &t.clips)
+                            .filter(|c| {
+                                !c.muted
+                                    && c.volume > 0.0
+                                    && matches!(c.source, ClipSource::Voicevox { .. })
+                                    && settings.character_id.is_some()
+                                    && c.character.as_ref().map(|b| b.character_id)
+                                        == settings.character_id
                             })
-                            .clone(),
+                            .filter_map(|c| {
+                                let asset = assets.get(&c.source.asset_id()?)?;
+                                if !asset.has_audio {
+                                    return None;
+                                }
+                                let path = storage.resolve(project.project_uuid, asset);
+                                Some(crate::sprites::speech::VoiceSource {
+                                    revision: crate::sprites::psd::revision(&path),
+                                    path,
+                                    start: c.timeline_start,
+                                    offset: c.source_offset,
+                                    duration: c.duration,
+                                    volume: c.volume,
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    });
+                    Some(crate::sprites::SpriteRender {
+                        voices: sources.clone(),
+                        source_revision: crate::sprites::psd::revision(&settings.psd),
+                        speech: Vec::new(),
                         settings,
                     })
                 } else {

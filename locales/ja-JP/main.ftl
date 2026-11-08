@@ -361,3 +361,6 @@ sprite-voice-missing = 口パク用の音声が見つかりません。素材を
 sprite-voice-changed = 口パク解析中に音声が変更されました。再試行してください。
 sprite-voice-invalid = 口パク用WAVを解析できません。
 sprite-voice-too-long = 口パク解析は1ファイル1時間までに対応しています。
+
+add-sprite = 立ち絵クリップを追加
+sprite-none = 立ち絵が登録されていません

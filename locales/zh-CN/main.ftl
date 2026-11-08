@@ -361,3 +361,6 @@ sprite-voice-missing = 找不到口型同步音频，请重新关联素材。
 sprite-voice-changed = 分析期间音频发生变化，请重试。
 sprite-voice-invalid = 无法分析口型同步WAV。
 sprite-voice-too-long = 每个文件最多支持一小时的口型分析。
+
+add-sprite = 添加立绘片段
+sprite-none = 尚未注册立绘

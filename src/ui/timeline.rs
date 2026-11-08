@@ -41,11 +41,38 @@ impl App {
             if ui.button(self.tr("add-subtitle")).clicked() {
                 self.insert_text(true, false);
             }
-            if ui.button(self.tr("sprite-settings")).clicked() {
-                self.sprite_ui.open = true;
-            }
             if ui.button(self.tr("add-text")).clicked() {
                 self.insert_text(false, false);
+            }
+            let mut add_sprite = None;
+            ui.menu_button(self.tr("add-sprite"), |ui| {
+                if self.sprites.library.sprites.is_empty() {
+                    ui.weak(self.tr("sprite-none"));
+                } else {
+                    egui::ScrollArea::vertical()
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            for sprite in &self.sprites.library.sprites {
+                                let label =
+                                    format!("{} [{}]", sprite.name, &sprite.id.to_string()[..8]);
+                                if ui.button(label).clicked() {
+                                    add_sprite = Some(sprite.id);
+                                    ui.close();
+                                }
+                            }
+                        });
+                }
+                ui.separator();
+                if ui.button(self.tr("sprite-settings")).clicked() {
+                    self.sprite_ui.open = true;
+                    ui.close();
+                }
+            });
+            if let Some(id) = add_sprite {
+                self.insert_sprite(id);
+            }
+            if ui.button(self.tr("sprite-settings")).clicked() {
+                self.sprite_ui.open = true;
             }
             if ui.button(self.tr("add-layer")).clicked() {
                 self.edit(|p| {

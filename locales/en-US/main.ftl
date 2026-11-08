@@ -361,3 +361,6 @@ sprite-voice-missing = Lip-sync audio is missing. Relink the asset.
 sprite-voice-changed = Audio changed during lip-sync analysis. Please retry.
 sprite-voice-invalid = Cannot analyze the lip-sync WAV.
 sprite-voice-too-long = Lip-sync analysis supports up to one hour per file.
+
+add-sprite = Add sprite clip
+sprite-none = No sprites registered

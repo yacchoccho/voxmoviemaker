@@ -364,3 +364,4 @@ sprite-voice-too-long = 口パク解析は1ファイル1時間までに対応し
 
 add-sprite = 立ち絵クリップを追加
 sprite-none = 立ち絵が登録されていません
+timeline-resize-hint = 選択中のクリップの左右端をドラッグすると長さを変更できます。Escapeで取り消します。

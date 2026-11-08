@@ -80,8 +80,10 @@ pub struct ExportJob {
 }
 pub struct DragClip {
     pub id: Id,
+    pub edge: Option<crate::project::commands::ClipEdge>,
     pub offset: f32,
     pub start: u64,
+    pub end: u64,
     pub track: usize,
 }
 pub struct App {

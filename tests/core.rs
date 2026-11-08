@@ -634,3 +634,88 @@ fn automatic_placement_respects_layer_flags_limits_and_timeline_bounds() {
     );
     assert_eq!(project, before);
 }
+
+#[test]
+fn clip_edge_resize_bounds_preserve_sources_neighbors_and_undo() {
+    use commands::ClipEdge::{End, Start};
+    let temp = Temp::new();
+    for kind in [MediaKind::Video, MediaKind::Audio, MediaKind::Image] {
+        let a = asset(&temp, "resize", kind);
+        let mut p = Project::default();
+        let mut c = clip(&a, 60, 60);
+        c.source_offset = 30;
+        let id = c.id;
+        p.assets.push(a.clone());
+        p.tracks[0].clips.push(c);
+        let left = commands::resized_clip(&p, id, Start, 0).unwrap();
+        assert_eq!(
+            left.timeline_start,
+            if kind == MediaKind::Image { 0 } else { 30 }
+        );
+        assert_eq!(left.source_offset, 0);
+        assert_eq!(left.end(), 120);
+        let right = commands::resized_clip(&p, id, End, 1000).unwrap();
+        assert_eq!(
+            right.end(),
+            if kind == MediaKind::Image { 1000 } else { 330 }
+        );
+        p.tracks[0].clips.push(clip(&a, 20, 20));
+        p.tracks[0].clips.push(clip(&a, 160, 20));
+        assert_eq!(
+            commands::resized_clip(&p, id, Start, 0)
+                .unwrap()
+                .timeline_start,
+            40
+        );
+        assert_eq!(commands::resized_clip(&p, id, End, 200).unwrap().end(), 160);
+        assert_eq!(
+            commands::resized_clip(&p, id, Start, 999).unwrap().duration,
+            1
+        );
+        assert_eq!(commands::resized_clip(&p, id, End, 0).unwrap().duration, 1);
+        let original = p.clone();
+        let mut history = History::default();
+        history
+            .edit(&mut p, |p| commands::resize_clip(p, id, Start, 90))
+            .unwrap();
+        assert_eq!(
+            (
+                p.clip(id).unwrap().source_offset,
+                p.clip(id).unwrap().duration
+            ),
+            (60, 30)
+        );
+        history.undo(&mut p);
+        assert_eq!(p, original);
+        history.redo(&mut p);
+        assert_eq!(p.clip(id).unwrap().timeline_start, 90);
+        p.tracks[0].locked = true;
+        assert_eq!(
+            commands::resize_clip(&mut p, id, End, 150).unwrap_err(),
+            "track-locked"
+        );
+    }
+    for source in [
+        ClipSource::Sprite {
+            settings_id: Id::new_v4(),
+        },
+        ClipSource::Text {
+            settings: TextSettings {
+                text: "title".into(),
+                ..Default::default()
+            },
+        },
+    ] {
+        let mut p = Project::default();
+        let a = asset(&temp, "unused", MediaKind::Image);
+        let mut c = clip(&a, 30, 30);
+        c.source = source;
+        let id = c.id;
+        p.tracks[0].clips.push(c);
+        commands::resize_clip(&mut p, id, End, 600).unwrap();
+        assert_eq!(p.clip(id).unwrap().duration, 570);
+        commands::resize_clip(&mut p, id, Start, 0).unwrap();
+        assert_eq!(p.clip(id).unwrap().duration, 600);
+        p.validate().unwrap();
+    }
+}

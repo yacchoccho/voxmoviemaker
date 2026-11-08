@@ -3074,3 +3074,89 @@ fn first_save_confirmation_can_choose_destination_and_then_close() {
     assert!(f.app.allow_close && !f.app.confirm_close);
     assert!(!f.app.dirty());
 }
+
+#[test]
+fn selected_clip_edges_resize_without_moving_or_seeking_and_cancel_safely() {
+    for sprite in [false, true] {
+        let mut f = Fixture::new();
+        let id = f.image_clip(0);
+        if sprite {
+            use voxmoviemaker::sprites::{Sprite, SpriteLibrary};
+            let mut s = Sprite::new("Sprite".into());
+            s.psd = sprite_psd(&f);
+            let settings_id = s.id;
+            f.app
+                .save_sprites(SpriteLibrary {
+                    schema_version: 1,
+                    sprites: vec![s],
+                })
+                .unwrap();
+            f.app.project.clip_mut(id).unwrap().source = ClipSource::Sprite { settings_id };
+        }
+        f.app.snap = false;
+        f.app.playhead = 23;
+        f.app.project.clip_mut(id).unwrap().timeline_start = 30;
+        f.app.select(id);
+        f.frame(vec![]);
+        f.frame(vec![]);
+        let canvas = f.app.timeline_rect.unwrap();
+        let x = |frame: u64| canvas.left() + LABEL_WIDTH + frame as f32 / 30.0 * 70.0;
+        let y = canvas.top() + RULER_HEIGHT + ROW_HEIGHT / 2.0;
+        let from = egui::pos2(x(180) - 2.0, y);
+        let out = f.frame(vec![Event::PointerMoved(from)]);
+        assert_eq!(
+            out.platform_output.cursor_icon,
+            egui::CursorIcon::ResizeHorizontal
+        );
+        f.frame(vec![Fixture::button(from, true)]);
+        let to = from + egui::vec2(70.0, 0.0);
+        f.frame(vec![Event::PointerMoved(to)]);
+        assert_eq!(
+            f.app.project.clip(id).unwrap().duration,
+            150,
+            "commit on release"
+        );
+        f.frame(vec![Fixture::button(to, false)]);
+        assert_eq!(
+            (
+                f.app.project.clip(id).unwrap().timeline_start,
+                f.app.project.clip(id).unwrap().duration
+            ),
+            (30, 180)
+        );
+        assert_eq!(f.app.playhead, 23);
+        assert_eq!(f.app.project.track_of(id), Some(0));
+        f.app.history.undo(&mut f.app.project);
+        assert_eq!(f.app.project.clip(id).unwrap().duration, 150);
+        f.app.history.redo(&mut f.app.project);
+        // A fast left-edge movement and release in the same frame still commits.
+        f.frame(vec![]);
+        let from = egui::pos2(x(30) + 2.0, y);
+        let to = from + egui::vec2(70.0, 0.0);
+        f.frame(vec![Event::PointerMoved(from)]);
+        f.frame(vec![Fixture::button(from, true)]);
+        f.frame(vec![Event::PointerMoved(to), Fixture::button(to, false)]);
+        let c = f.app.project.clip(id).unwrap();
+        assert_eq!(
+            (c.timeline_start, c.source_offset, c.duration),
+            (60, 30, 150)
+        );
+        f.app.history.undo(&mut f.app.project);
+        f.frame(vec![]);
+        let from = egui::pos2(x(210) - 2.0, y);
+        let to = from + egui::vec2(50.0, 0.0);
+        f.frame(vec![Event::PointerMoved(from)]);
+        f.frame(vec![Fixture::button(from, true)]);
+        f.frame(vec![Event::PointerMoved(to)]);
+        f.frame(vec![Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }]);
+        f.frame(vec![Fixture::button(to, false)]);
+        assert_eq!(f.app.project.clip(id).unwrap().duration, 180);
+        assert!(f.app.drag.is_none());
+    }
+}

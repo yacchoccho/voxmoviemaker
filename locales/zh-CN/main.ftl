@@ -364,3 +364,4 @@ sprite-voice-too-long = 每个文件最多支持一小时的口型分析。
 
 add-sprite = 添加立绘片段
 sprite-none = 尚未注册立绘
+timeline-resize-hint = 拖动所选片段的左右边缘可调整长度。按Escape取消。

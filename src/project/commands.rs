@@ -58,6 +58,80 @@ pub fn move_clip(project: &mut Project, id: Id, track: usize, start: u64) -> Res
     project.tracks[old].clips.retain(|c| c.id != id);
     insert(project, track, clip)
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClipEdge {
+    Start,
+    End,
+}
+/// Preview and commit share the same bounds: never cross a neighbor, source
+/// boundary or the one-frame minimum. Still images/text/sprites have no media end.
+pub fn resized_clip(project: &Project, id: Id, edge: ClipEdge, frame: u64) -> Result<Clip> {
+    let index = project.track_of(id).ok_or("missing-clip")?;
+    let track = &project.tracks[index];
+    if track.locked {
+        return Err("track-locked".into());
+    }
+    let mut clip = project.clip(id).ok_or("missing-clip")?.clone();
+    let finite = clip
+        .source
+        .asset_id()
+        .map(|id| project.asset(id))
+        .transpose()?
+        .filter(|asset| asset.kind != MediaKind::Image);
+    match edge {
+        ClipEdge::Start => {
+            let previous = track
+                .clips
+                .iter()
+                .filter(|c| c.id != id && c.end() <= clip.timeline_start)
+                .map(Clip::end)
+                .max()
+                .unwrap_or(0);
+            let source_start = if finite.is_some() {
+                clip.timeline_start.saturating_sub(clip.source_offset)
+            } else {
+                0
+            };
+            let start = frame.clamp(previous.max(source_start), clip.end() - 1);
+            clip.source_offset = if start >= clip.timeline_start {
+                clip.source_offset + start - clip.timeline_start
+            } else {
+                clip.source_offset
+                    .saturating_sub(clip.timeline_start - start)
+            };
+            clip.duration = clip.end() - start;
+            clip.timeline_start = start;
+        }
+        ClipEdge::End => {
+            let next = track
+                .clips
+                .iter()
+                .filter(|c| c.id != id && c.timeline_start >= clip.end())
+                .map(|c| c.timeline_start)
+                .min()
+                .unwrap_or(MAX_FRAME);
+            let source_end = finite.map_or(MAX_FRAME, |asset| {
+                project.frame_rate.frames(asset.duration_seconds)
+            });
+            let max_end = clip
+                .timeline_start
+                .saturating_add(source_end.saturating_sub(clip.source_offset))
+                .min(next)
+                .min(MAX_FRAME);
+            if max_end <= clip.timeline_start {
+                return Err("trim-outside-source".into());
+            }
+            clip.duration = frame.clamp(clip.timeline_start + 1, max_end) - clip.timeline_start;
+        }
+    }
+    clip.effects.clamp_duration(clip.duration);
+    Ok(clip)
+}
+pub fn resize_clip(project: &mut Project, id: Id, edge: ClipEdge, frame: u64) -> Result<()> {
+    let clip = resized_clip(project, id, edge, frame)?;
+    *project.clip_mut(id).ok_or("missing-clip")? = clip;
+    Ok(())
+}
 pub fn split(project: &mut Project, id: Id, frame: u64) -> Result<()> {
     let track = project.track_of(id).ok_or("missing-clip")?;
     if project.tracks[track].locked {

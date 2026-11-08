@@ -137,6 +137,7 @@ impl App {
         let mut select = None;
         let mut decorate = Vec::new();
         let mut move_to = None;
+        let mut resize_to = None;
         let mut action = None;
         let mut make_subtitle = false;
         egui::ScrollArea::both()
@@ -449,23 +450,72 @@ impl App {
                                 ui.close();
                             }
                         });
-                        if hit.drag_started() && !track.locked {
+                        let edge_at = |x: f32| {
+                            if self.selected != Some(clip.id) || track.locked {
+                                return None;
+                            }
+                            let handle = 6.0_f32.min(rect.width() / 2.0);
+                            if x <= rect.left() + handle {
+                                Some(commands::ClipEdge::Start)
+                            } else if x >= rect.right() - handle {
+                                Some(commands::ClipEdge::End)
+                            } else {
+                                None
+                            }
+                        };
+                        if self.selected == Some(clip.id) && !track.locked {
+                            for x in [rect.left() + 2.0, rect.right() - 2.0] {
+                                painter.line_segment(
+                                    [
+                                        egui::pos2(x, rect.top() + 8.0),
+                                        egui::pos2(x, rect.bottom() - 8.0),
+                                    ],
+                                    egui::Stroke::new(2.0_f32, ui.visuals().selection.stroke.color),
+                                );
+                            }
+                        }
+                        if hit.hovered() && hit.hover_pos().and_then(|p| edge_at(p.x)).is_some() {
+                            ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                        }
+                        let primary = egui::PointerButton::Primary;
+                        let edge_pressed = hit.is_pointer_button_down_on()
+                            && ctx.input(|i| {
+                                i.pointer.button_pressed(primary)
+                                    && i.pointer
+                                        .press_origin()
+                                        .and_then(|p| edge_at(p.x))
+                                        .is_some()
+                            });
+                        if (hit.drag_started_by(primary) || edge_pressed)
+                            && !track.locked
+                            && self.drag.is_none()
+                        {
                             select = Some(clip.id);
                             if let Some(pointer) = hit.interact_pointer_pos() {
-                                let origin = pointer - hit.drag_delta();
+                                let origin = ctx
+                                    .input(|i| i.pointer.press_origin())
+                                    .unwrap_or(pointer - hit.drag_delta());
+                                let edge = edge_at(origin.x);
+                                let anchor = if edge == Some(commands::ClipEdge::End) {
+                                    x_for(clip.end())
+                                } else {
+                                    rect.left()
+                                };
                                 self.drag = Some(DragClip {
                                     id: clip.id,
-                                    offset: origin.x - rect.left(),
+                                    edge,
+                                    offset: origin.x - anchor,
                                     start: clip.timeline_start,
+                                    end: clip.end(),
                                     track: index,
                                 });
                             }
                         }
                         if let Some(drag) = &mut self.drag
                             && drag.id == clip.id
-                            && let Some(pointer) = hit.interact_pointer_pos()
+                            && let Some(pointer) = ctx.input(|i| i.pointer.latest_pos())
                         {
-                            let (target, start) = position(
+                            let (target, frame) = position(
                                 egui::pos2(pointer.x - drag.offset, pointer.y),
                                 canvas,
                                 fps,
@@ -473,27 +523,46 @@ impl App {
                                 self.project.tracks.len().saturating_sub(1),
                             );
                             let threshold = fps.frames(8.0 / self.pixels_per_second as f64);
-                            let start = if self.snap {
+                            let frame = if self.snap {
                                 commands::snap(
                                     &self.project,
-                                    start,
+                                    frame,
                                     self.playhead,
                                     threshold,
                                     Some(clip.id),
                                 )
                             } else {
-                                start
+                                frame
                             };
-                            drag.track = target;
-                            drag.start = start;
-                            if hit.drag_stopped() {
-                                move_to = Some((drag.id, target, start));
+                            if let Some(edge) = drag.edge {
+                                ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                                if let Ok(resized) =
+                                    commands::resized_clip(&self.project, clip.id, edge, frame)
+                                {
+                                    drag.start = resized.timeline_start;
+                                    drag.end = resized.end();
+                                    if ctx.input(|i| i.pointer.button_released(primary)) {
+                                        resize_to = Some((drag.id, edge, frame));
+                                    }
+                                }
+                            } else {
+                                drag.track = target;
+                                drag.start = frame;
+                                drag.end = frame.saturating_add(clip.duration);
+                                if ctx.input(|i| i.pointer.button_released(primary)) {
+                                    move_to = Some((drag.id, target, frame));
+                                }
                             }
                         }
                         hit.on_hover_text(format!(
-                            "{} · {}",
+                            "{} · {}{}",
                             self.tr("start-frame"),
-                            clip.timeline_start
+                            clip.timeline_start,
+                            if self.selected == Some(clip.id) && !track.locked {
+                                format!("\n{}", self.tr("timeline-resize-hint"))
+                            } else {
+                                String::new()
+                            }
                         ));
                     }
                 }
@@ -501,13 +570,16 @@ impl App {
                     let x = x_for(drag.start);
                     let y = canvas.top() + RULER_HEIGHT + drag.track as f32 * ROW_HEIGHT;
                     let valid = self.project.clip(drag.id).is_some_and(|c| {
-                        self.project.tracks[drag.track].fits(drag.start, c.duration, Some(drag.id))
-                            && !self.project.tracks[drag.track].locked
+                        self.project.tracks[drag.track].fits(
+                            drag.start,
+                            drag.end.saturating_sub(drag.start),
+                            Some(c.id),
+                        ) && !self.project.tracks[drag.track].locked
                     });
                     painter.rect_stroke(
                         egui::Rect::from_min_size(
                             egui::pos2(x, y + 2.0),
-                            egui::vec2(30.0, ROW_HEIGHT - 4.0),
+                            egui::vec2((x_for(drag.end) - x).max(4.0), ROW_HEIGHT - 4.0),
                         ),
                         2.0,
                         egui::Stroke::new(
@@ -635,6 +707,10 @@ impl App {
         }
         if let Some((id, track, frame)) = move_to {
             self.edit(|p| commands::move_clip(p, id, track, frame));
+            self.drag = None;
+        }
+        if let Some((id, edge, frame)) = resize_to {
+            self.edit(|p| commands::resize_clip(p, id, edge, frame));
             self.drag = None;
         }
         if self.drag.is_some() && !ctx.input(|i| i.pointer.any_down()) {

@@ -364,3 +364,4 @@ sprite-voice-too-long = Lip-sync analysis supports up to one hour per file.
 
 add-sprite = Add sprite clip
 sprite-none = No sprites registered
+timeline-resize-hint = Drag either edge of the selected clip to change its length. Press Escape to cancel.
